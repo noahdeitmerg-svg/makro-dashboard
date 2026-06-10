@@ -164,7 +164,8 @@ def main():
     usd_stress = 0.458*pct_rank(dxy) + 0.146*pct_rank(dxy.pct_change(30)) + 0.396*pct_rank(vix)
     credit_timing = (100-pct_rank(hy.diff(60)))*0.6 + (100-pct_rank(hy))*0.4
     cross = (risk + credit)/2
-    lead = lambda a,b: (a/b).pct_change(90).mul(100).clip(-30,30)
+    # Leadership: tanh-Skalierung auf +/-30 (saettigt weich statt am Limit zu kleben), 5T-geglaettet
+    lead = lambda a,b: (np.tanh((a/b).pct_change(90).rolling(5).mean()*100/40)*30)
     eth_spx = lead(al(Y['ETH-USD']), al(Y['^GSPC'])); btc_spx = lead(al(Y['BTC-USD']), al(Y['^GSPC']))
     spxoil_l = lead(al(Y['^GSPC']), al(Y['CL=F'])); eth_btc = lead(al(Y['ETH-USD']), al(Y['BTC-USD']))
 
