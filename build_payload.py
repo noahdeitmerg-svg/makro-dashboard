@@ -5,7 +5,7 @@ from macro_engine import *
 
 def build(series, dates, releases=None, data_quality=100):
     d = series
-    r2 = lambda a: [round(float(x),2) for x in a]
+    r2 = lambda a: [None if x!=x else round(float(x),2) for x in a]
     last = lambda k: float(d[k][-1])
     ago  = lambda k,n: float(d[k][-1-n])
     dlt  = lambda k,n: last(k)-ago(k,n)
@@ -68,7 +68,7 @@ def build(series, dates, releases=None, data_quality=100):
 
     payload = {
         'updated': dates[-1] + ' 09:01',
-        'window': 2200,
+        'window': len(dates),
         'dates': dates,
         'series': {k: r2(d[k]) for k in ['mri','credit_timing','usd_stress','fed','ecb','boj','pboc','glob','cross','eth_spx','btc_spx','spx_oil','eth_btc','liquidity','growth','credit','risk']},
         'headline': {
@@ -96,10 +96,10 @@ def build(series, dates, releases=None, data_quality=100):
         'cross_asset': {'phase':'Transition','confidence':'LOW','nasdaq_spx':'+4.0%','spx_oil':'+10.3%'},
         'leadership': [('ETH/SPX 90D','-28.9%'),('BTC/SPX 90D','-21.3%'),('SPX/Oil 90D','+10.3%'),('ETH/BTC 90D','-9.7%')],
         'chart_headers': {
-            'mri':'Latest {:.1f} | 30D {:.1f}% | Window 2200d'.format(mri_now, pc('mri',30)),
-            'credit_timing':'Latest {:.1f} | 30D {:.1f}% | Window 2200d'.format(last('credit_timing'), pc('credit_timing',30)),
-            'usd_stress':'Latest {:.1f} | 30D {:.1f}% | Window 2200d'.format(last('usd_stress'), pc('usd_stress',30)),
-            'cb':'Global 30D {:.1f}% | Window 2200d'.format(pc('glob',30)),
+            'mri':'Latest {:.1f} | 30D {:.1f}% | Window {}d'.format(mri_now, pc('mri',30), len(dates)),
+            'credit_timing':'Latest {:.1f} | 30D {:.1f}% | Window {}d'.format(last('credit_timing'), pc('credit_timing',30), len(dates)),
+            'usd_stress':'Latest {:.1f} | 30D {:.1f}% | Window {}d'.format(last('usd_stress'), pc('usd_stress',30), len(dates)),
+            'cb':'Global 30D {:.1f}% | Window {}d'.format(pc('glob',30), len(dates)),
             'cb_legend':{'ecb':round(last('ecb'),2),'fed':round(last('fed'),2),'pboc':round(last('pboc'),2),'boj':round(last('boj'),2)},
         },
     }

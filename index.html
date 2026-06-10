@@ -7,18 +7,25 @@
 <link rel="manifest" href="manifest.json">
 <link rel="icon" href="icon-192.png">
 <link rel="apple-touch-icon" href="icon-192.png">
-<title>Makro Dashboard – Macro Regime Index</title>
+<title>AlphaCycle Macro Dashboard</title>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/hammerjs@2.0.8/hammer.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.0.1/dist/chartjs-plugin-zoom.min.js"></script>
 <script src="data.js"></script>
 <style>
   :root{--bg:#1e1f22;--card:#2b2d31;--card2:#313338;--txt:#dbdee1;--mut:#949ba4;--acc:#5865f2;}
   *{box-sizing:border-box} body{margin:0;background:var(--bg);color:var(--txt);font-family:'Segoe UI',Roboto,Arial,sans-serif;padding:18px}
   h1{font-size:20px;margin:0 0 4px} .sub{color:var(--mut);font-size:12px;margin-bottom:16px}
   .badge{display:inline-flex;align-items:center;gap:8px;font-weight:700;font-size:18px;letter-spacing:.5px}
-  .dot{width:14px;height:14px;border-radius:50%} 
+  .dot{width:14px;height:14px;border-radius:50%}
   .grid{display:grid;gap:12px} .charts{grid-template-columns:repeat(auto-fit,minmax(min(420px,100%),1fr))}
   @media (max-width:520px){body{padding:10px} .cwrap{height:200px} .big .cwrap{height:250px}}
-  .panel{background:#fff;border-radius:8px;padding:8px 10px 2px;color:#222}
+  .panel{background:#fff;border-radius:8px;padding:8px 10px 2px;color:#222;position:relative}
+  .tools{position:absolute;top:5px;right:8px;z-index:5;display:flex;gap:4px}
+  .tbtn{background:#f0f1f3;border:1px solid #d6d8dc;border-radius:5px;color:#444;font-size:13px;line-height:1;padding:3px 7px;cursor:pointer}
+  .tbtn:hover{background:#e2e4e8}
+  .panel:fullscreen{display:flex;flex-direction:column;justify-content:center;padding:24px}
+  .panel:fullscreen .cwrap{flex:1;height:auto;max-height:none}
   .panel .hdr{font:10px/1.4 'DejaVu Sans',Verdana,sans-serif;color:#444}
   .panel .ttl{text-align:center;font:13px 'DejaVu Sans',Verdana,sans-serif;color:#111;margin:-2px 0 2px}
   .panel .ftr{display:flex;justify-content:space-between;font:9px 'DejaVu Sans',Verdana,sans-serif;color:#555;padding:1px 4px 4px}
@@ -36,26 +43,26 @@
 </style>
 </head>
 <body>
-<h1>MACRO Dashboard</h1>
+<h1>AlphaCycle Macro Dashboard</h1>
 <div class="sub" id="updated"></div>
 <div class="hero" id="hero"></div>
 <div class="grid charts" id="charts">
-  <div class="panel big"><div class="hdr" id="h_mri"></div><div class="ttl">DeFi Circle - Macro Regime Index (0-100)</div><div class="cwrap"><canvas id="c_mri"></canvas></div><div class="ftr"><span id="f_mri_l"></span><span></span></div></div>
-  <div class="panel"><div class="hdr" id="h_ct"></div><div class="ttl">DeFi Circle - Credit Conditions Timing</div><div class="cwrap"><canvas id="c_ct"></canvas></div><div class="ftr"><span id="f_ct_l"></span><span>Higher = tighter credit • falling = easing</span></div></div>
-  <div class="panel"><div class="hdr" id="h_us"></div><div class="ttl">DeFi Circle - USD Funding Stress</div><div class="cwrap"><canvas id="c_us"></canvas></div><div class="ftr"><span id="f_us_l"></span><span>Higher = USD+VIX stress • falling = easing</span></div></div>
-  <div class="panel"><div class="hdr" id="h_cb"></div><div class="ttl">DeFi Circle - Central Bank Liquidity (USD)</div><div class="cwrap"><canvas id="c_cb"></canvas></div><div class="ftr"><span id="f_cb_l"></span><span></span></div></div>
-  <div class="panel"><div class="hdr"></div><div class="ttl">DeFi Circle - Global Liquidity (Daily, USD)</div><div class="cwrap"><canvas id="c_gl"></canvas></div><div class="ftr"><span id="f_gl_l"></span><span></span></div></div>
-  <div class="panel"><div class="hdr"></div><div class="ttl">DeFi Circle - Global Liquidity MTD% Candle</div><div class="cwrap"><canvas id="c_mtd"></canvas></div><div class="ftr"><span id="f_mtd_l"></span><span></span></div></div>
-  <div class="panel"><div class="hdr" id="h_ca"></div><div class="ttl">DeFi Circle - Cross Asset Regime</div><div class="cwrap"><canvas id="c_ca"></canvas></div><div class="ftr"><span id="f_ca_l"></span><span></span></div></div>
-  <div class="panel"><div class="hdr" id="h_rl"></div><div class="ttl">DeFi Circle - Relative Leadership</div><div class="cwrap"><canvas id="c_rl"></canvas></div><div class="ftr"><span id="f_rl_l"></span><span>scaled to its own +/-30 leadership range</span></div></div>
+  <div class="panel big"><div class="hdr" id="h_mri"></div><div class="ttl">AlphaCycle - Macro Regime Index (0-100)</div><div class="cwrap"><canvas id="c_mri"></canvas></div><div class="ftr"><span id="f_mri_l"></span><span></span></div></div>
+  <div class="panel"><div class="hdr" id="h_ct"></div><div class="ttl">AlphaCycle - Credit Conditions Timing</div><div class="cwrap"><canvas id="c_ct"></canvas></div><div class="ftr"><span id="f_ct_l"></span><span>Higher = tighter credit • falling = easing</span></div></div>
+  <div class="panel"><div class="hdr" id="h_us"></div><div class="ttl">AlphaCycle - USD Funding Stress</div><div class="cwrap"><canvas id="c_us"></canvas></div><div class="ftr"><span id="f_us_l"></span><span>Higher = USD+VIX stress • falling = easing</span></div></div>
+  <div class="panel"><div class="hdr" id="h_cb"></div><div class="ttl">AlphaCycle - Central Bank Liquidity (USD)</div><div class="cwrap"><canvas id="c_cb"></canvas></div><div class="ftr"><span id="f_cb_l"></span><span></span></div></div>
+  <div class="panel"><div class="hdr"></div><div class="ttl">AlphaCycle - Global Liquidity (Daily, USD)</div><div class="cwrap"><canvas id="c_gl"></canvas></div><div class="ftr"><span id="f_gl_l"></span><span></span></div></div>
+  <div class="panel"><div class="hdr"></div><div class="ttl">AlphaCycle - Global Liquidity MTD% Candle</div><div class="cwrap"><canvas id="c_mtd"></canvas></div><div class="ftr"><span id="f_mtd_l"></span><span></span></div></div>
+  <div class="panel"><div class="hdr" id="h_ca"></div><div class="ttl">AlphaCycle - Cross Asset Regime</div><div class="cwrap"><canvas id="c_ca"></canvas></div><div class="ftr"><span id="f_ca_l"></span><span></span></div></div>
+  <div class="panel"><div class="hdr" id="h_rl"></div><div class="ttl">AlphaCycle - Relative Leadership</div><div class="cwrap"><canvas id="c_rl"></canvas></div><div class="ftr"><span id="f_rl_l"></span><span>scaled to its own +/-30 leadership range</span></div></div>
 </div>
 <div class="grid cards" id="cards"></div>
 <script>
-const M = window.MACRO_DATA, H = M.headline, D = M.dates, cp = '© DeFi Circle 2026 • ' + M.updated.slice(8,10)+'.'+M.updated.slice(5,7)+'.'+M.updated.slice(0,4);
-document.getElementById('updated').textContent = 'Window ' + M.window + 'd • Updated ' + M.updated + ' • Rebuild (lokal)';
+const M = window.MACRO_DATA, H = M.headline, D = M.dates, cp = '© AlphaCycle • ' + M.updated.slice(8,10)+'.'+M.updated.slice(5,7)+'.'+M.updated.slice(0,4);
+if (window.ChartZoom) Chart.register(window.ChartZoom);
+document.getElementById('updated').textContent = 'Window ' + M.window + 'd • Updated ' + M.updated;
 
 /* ---------- Hero / Regime-Badge ---------- */
-const lights = {green:'green',red:'red',yellow:'yellow'};
 document.getElementById('hero').style.borderLeftColor = H.regime_color;
 document.getElementById('hero').innerHTML = `
   <div class="badge"><span class="dot" style="background:${H.regime_color}"></span>${H.regime}</div>
@@ -65,25 +72,24 @@ document.getElementById('hero').innerHTML = `
 function fmt(x){return (x>0?'+':'')+x.toFixed(1)}
 
 /* ---------- Chart-Helfer (matplotlib-Look) ---------- */
-const watermark = {id:'wm', afterDraw(c){const{ctx,chartArea:a}=c; if(!a)return; ctx.save();ctx.font='26px Verdana';ctx.fillStyle='rgba(120,130,150,.18)';ctx.textAlign='center';ctx.fillText('defi circle',(a.left+a.right)/2,(a.top+a.bottom)/2+30);
+const watermark = {id:'wm', afterDraw(c){const{ctx,chartArea:a}=c; if(!a)return; ctx.save();ctx.font='26px Verdana';ctx.fillStyle='rgba(120,130,150,.18)';ctx.textAlign='center';ctx.fillText('alphacycle',(a.left+a.right)/2,(a.top+a.bottom)/2+30);
  ctx.beginPath();ctx.strokeStyle='rgba(120,130,220,.25)';ctx.lineWidth=10;ctx.arc((a.left+a.right)/2,(a.top+a.bottom)/2-15,22,0,7);ctx.stroke();ctx.restore();}};
 function bands(zones){return {id:'bands', beforeDatasetsDraw(c){const{ctx,chartArea:a,scales:{y}}=c; if(!a)return; ctx.save();
  for(const z of zones){ctx.fillStyle=z.c; const y1=y.getPixelForValue(Math.min(z.hi,y.max)), y2=y.getPixelForValue(Math.max(z.lo,y.min)); ctx.fillRect(a.left,y1,a.right-a.left,y2-y1);}
  for(const v of [40,50,60]){if(v<y.min||v>y.max)continue; ctx.strokeStyle=v==50?'rgba(80,80,80,.55)':(v==40?'rgba(200,60,60,.6)':'rgba(60,140,60,.6)');ctx.setLineDash([5,4]);ctx.lineWidth=1;ctx.beginPath();const yy=y.getPixelForValue(v);ctx.moveTo(a.left,yy);ctx.lineTo(a.right,yy);ctx.stroke();}
  ctx.restore();}}}
 const ZONES=[{lo:60,hi:100,c:'rgba(225,240,238,.7)'},{lo:40,hi:60,c:'rgba(252,247,222,.7)'},{lo:0,hi:40,c:'rgba(251,235,238,.7)'}];
-const yearTicks = {};
-D.forEach((d,i)=>{const y=d.slice(0,4); if(!(y in yearTicks) && d.slice(5,7)==='01') yearTicks[y]=i;});
 function xopts(dates){return {type:'category', labels:dates, ticks:{autoSkip:false, maxRotation:0, font:{size:10}, color:'#333',
-  callback:(v,i)=>{const d=dates[i]; return (d.slice(5,10)==='01-01')?d.slice(0,4):null}}, grid:{color:'rgba(100,120,200,.25)', borderDash:[4,4], drawTicks:false, lineWidth:ctx=>ctx.tick&&ctx.tick.label?1:0}}}
+  callback:function(v,i){const d=dates[i]; return (d.slice(5,10)==='01-01')?d.slice(0,4):null}}, grid:{color:'rgba(100,120,200,.25)', borderDash:[4,4], drawTicks:false, lineWidth:function(ctx){return ctx.tick&&ctx.tick.label?1:0}}}}
+const ZOOM = {zoom:{wheel:{enabled:true},pinch:{enabled:true},mode:'x'},pan:{enabled:true,mode:'x'},limits:{x:{minRange:30}}};
 function mk(id,datasets,ymin,ymax,zoned,ylabel,dates,legend){ return new Chart(document.getElementById(id),{type:'line',
  data:{labels:dates,datasets},
- options:{responsive:true,maintainAspectRatio:false,animation:false,
+ options:{responsive:true,maintainAspectRatio:false,animation:false,normalized:true,spanGaps:false,
   interaction:{mode:'index',intersect:false},
   scales:{x:xopts(dates), y:{min:ymin,max:ymax,title:{display:!!ylabel,text:ylabel,font:{size:10},color:'#333'},ticks:{font:{size:10},color:'#333'},grid:{display:false}}},
-  plugins:{legend:legend?{display:true,position:'chartArea',align:'start',labels:{font:{size:9},boxWidth:18,boxHeight:2,color:'#222'}}:{display:false},tooltip:{enabled:true}}},
+  plugins:{legend:legend?{display:true,position:'chartArea',align:'start',labels:{font:{size:9},boxWidth:18,boxHeight:2,color:'#222'}}:{display:false},tooltip:{enabled:true},zoom:ZOOM}},
  plugins:[watermark].concat(zoned?[bands(ZONES)]:[])});}
-const line=(data,color,label,w)=>({data,label:label||'',borderColor:color,borderWidth:w||1.4,pointRadius:0,tension:0,fill:false});
+const line=(data,color,label,w)=>({data,label:label||'',borderColor:color,borderWidth:w||1.4,pointRadius:0,pointHitRadius:6,tension:0,fill:false});
 
 /* ---------- Charts ---------- */
 document.getElementById('h_mri').textContent = M.chart_headers.mri;
@@ -94,18 +100,19 @@ document.getElementById('h_us').textContent = M.chart_headers.usd_stress;
 mk('c_us',[line(M.series.usd_stress,'#1f6fb4')],0,100,true,'Pressure (0-100)',D);
 const cl=M.chart_headers.cb_legend;
 document.getElementById('h_cb').textContent = M.chart_headers.cb;
-mk('c_cb',[line(M.series.ecb,'#2ca02c','ECB ('+cl.ecb+'T)'),line(M.series.fed,'#1f6fb4','Fed ('+cl.fed+'T)'),line(M.series.pboc,'#e8900c','PBoC ('+cl.pboc+'T)'),line(M.series.boj,'#d62728','BoJ ('+cl.boj+'T)')],4,10,false,'Assets (T USD)',D,true);
+mk('c_cb',[line(M.series.ecb,'#2ca02c','ECB ('+cl.ecb+'T)'),line(M.series.fed,'#1f6fb4','Fed ('+cl.fed+'T)'),line(M.series.pboc,'#e8900c','PBoC ('+cl.pboc+'T)'),line(M.series.boj,'#d62728','BoJ ('+cl.boj+'T)')],null,null,false,'Assets (T USD)',D,true);
 mk('c_gl',[line(M.series.glob,'#111','',1.5)],null,null,false,'Assets (T USD)',D);
 /* MTD% Candle: Monats-Prozentaenderung der globalen Liquiditaet */
 (function(){const g=M.series.glob; const months={}; D.forEach((d,i)=>{const m=d.slice(0,7); (months[m]=months[m]||[]).push(i)});
- const lab=Object.keys(months).sort(); const pct=lab.map(m=>{const ix=months[m]; return (g[ix[ix.length-1]]/g[ix[0]]-1)*100});
- const ma=pct.map((_,i)=>{const s=pct.slice(Math.max(0,i-2),i+1); return s.reduce((a,b)=>a+b,0)/s.length});
+ const lab=Object.keys(months).sort(); const pct=lab.map(m=>{const ix=months[m]; const a=g[ix[0]], b=g[ix[ix.length-1]]; return (a==null||b==null)?null:(b/a-1)*100});
+ const ma=pct.map((_,i)=>{const s=pct.slice(Math.max(0,i-2),i+1).filter(v=>v!=null); return s.length?s.reduce((a,b)=>a+b,0)/s.length:null});
  new Chart(document.getElementById('c_mtd'),{data:{labels:lab,datasets:[
    {type:'bar',data:pct,backgroundColor:pct.map(v=>v>=0?'rgba(44,160,44,.85)':'rgba(214,39,40,.85)')},
    {type:'line',data:ma,borderColor:'#1f6fb4',borderWidth:1.5,pointRadius:0,tension:.3}]},
   options:{responsive:true,maintainAspectRatio:false,animation:false,
-   scales:{x:{ticks:{autoSkip:false,maxRotation:0,font:{size:10},color:'#333',callback:(v,i)=>lab[i].slice(5,7)==='01'?lab[i].slice(0,4):null},grid:{color:'rgba(100,120,200,.25)',borderDash:[4,4]}},
-   y:{title:{display:true,text:'MTD %',font:{size:10},color:'#333'},ticks:{font:{size:10},color:'#333'}}},plugins:{legend:{display:false}}},plugins:[watermark]});
+   scales:{x:{ticks:{autoSkip:false,maxRotation:0,font:{size:10},color:'#333',callback:function(v,i){return lab[i].slice(5,7)==='01'?lab[i].slice(0,4):null}},grid:{color:'rgba(100,120,200,.25)',borderDash:[4,4]}},
+   y:{title:{display:true,text:'MTD %',font:{size:10},color:'#333'},ticks:{font:{size:10},color:'#333'}}},
+   plugins:{legend:{display:false},zoom:{zoom:{wheel:{enabled:true},pinch:{enabled:true},mode:'x'},pan:{enabled:true,mode:'x'},limits:{x:{minRange:6}}}}},plugins:[watermark]});
  document.getElementById('f_mtd_l').textContent=cp;})();
 document.getElementById('h_ca').textContent='SPX/Oil '+M.cross_asset.spx_oil+' | ETH/SPX '+M.leadership[0][1].slice(0,-3)+' | '+M.cross_asset.phase;
 mk('c_ca',[line(M.series.cross,'#111','',1.5)],0,100,true,'',D);
@@ -127,6 +134,17 @@ card('Cross-Asset Phase',`<div class="tagline">${M.cross_asset.phase} • ${M.cr
 card('Relative Leadership', M.leadership.map(l=>`<div class="row"><span class="k">${l[0]}:</span><span class="v mono">${l[1]}</span></div>`).join(''));
 card('Key Levels', M.key_levels.map(k=>`<div class="row"><span class="k">${lamp(k.light)}<b>${k.name}:</b></span><span class="v mono">${k.value}${k.detail?' '+k.detail:''}</span></div>`).join(''), '#43b581');
 card('Chart Window / History',`<div class="row"><span class="k">Chart Window</span><span class="v">${M.window}d</span></div><div class="row"><span class="k">History</span><span class="v">${M.window}d</span></div><div class="row"><span class="k">Updated</span><span class="v">${M.updated}</span></div>`);
+
+/* ---------- Interaktion: Vollbild + Zoom-Reset pro Panel ---------- */
+document.querySelectorAll('.panel').forEach(p=>{
+  const tb=document.createElement('div'); tb.className='tools';
+  tb.innerHTML='<button class="tbtn" title="Zoom zurücksetzen">⟲</button><button class="tbtn" title="Vollbild">⛶</button>';
+  const btns=tb.querySelectorAll('button');
+  btns[0].onclick=()=>{const c=Chart.getChart(p.querySelector('canvas')); if(c&&c.resetZoom)c.resetZoom();};
+  btns[1].onclick=()=>{document.fullscreenElement?document.exitFullscreen():p.requestFullscreen();};
+  p.insertBefore(tb,p.firstChild);
+});
+document.querySelectorAll('.cwrap canvas').forEach(cv=>{cv.ondblclick=()=>{const c=Chart.getChart(cv); if(c&&c.resetZoom)c.resetZoom();};});
 if('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js');
 </script>
 </body>

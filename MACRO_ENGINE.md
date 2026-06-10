@@ -8,14 +8,18 @@ MRI = 50 + (Liquidity-50)·0.25 + (Growth-50)·0.25 + (Credit-50)·0.20
 10.06.2026: 42.0/52.4/52.5/59.9/58.4 → **MRI 49.33** ✓ (Original 49.3)
 
 ## Sub-Scores (Live-Modus, update_data.py)
-Alle Scores = rollierende Perzentil-Normalisierung über 2200 Tage (`pct_rank`).
-Gewichte am 10.06.2026 mit Live-Daten exakt gegen die Original-Sub-Scores gelöst
-(Ist: 42.0 / 52.4 / 52.4 / 59.8 / 58.4 → MRI 49.3, Regime TRANSITION ✓):
-- **Liquidity** = 0.484·pct(Δ90 Global-CB) + 0.30·pct(Δ90 M2) + 0.216·pct(Level Global-CB)
-- **Growth** = 0.15·pct(Payrolls YoY) + 0.30·(100−pct(Claims)) + 0.30·(100−pct(Δ180 Unemployment)) + 0.25·pct(10Y−3M)
-- **Credit** = 0.15·(100−pct(HY)) + 0.09·(100−pct(IG)) + 0.76·(100−pct(Δ30 HY))  *(stark momentum-getrieben — nur so ist „neutral 52.5" bei historisch engen Spreads (HY 2.75) erreichbar)*
-- **Risk Appetite** = 0.225·pct(Δ90 NASDAQ/SPX) + 0.225·pct(Δ90 SPX/Oil) + 0.55·(100−pct(VIX))
-- **USD Stress** = 0.455·pct(DXY) + 0.145·pct(Δ30 DXY) + 0.40·pct(VIX)   *(im MRI subtrahiert)*
+Alle Scores = rollierende Perzentil-Normalisierung über 2200 Tage (`pct_rank`), Datenbasis volle Historie ab 1990.
+Gewichte am 10.06.2026 mit Live-Daten exakt gegen die Original-Sub-Scores gelöst (Solver: `calib2.py`;
+Ist: 42.0 / 52.4 / 52.5 / 59.9 / 58.4 → MRI 49.3, Regime TRANSITION ✓):
+- **Liquidity** = 0.507·pct(Δ90 Global-CB) + 0.330·pct(Δ90 M2) + 0.162·pct(Level Global-CB)
+- **Growth** = 0.225·pct(Payrolls YoY) + 0.247·(100−pct(Claims)) + 0.259·(100−pct(Δ180 Unemployment)) + 0.269·pct(10Y−3M)
+- **Credit** = 0.135·(100−pct(HY)) + 0.085·(100−pct(IG)) + 0.78·(100−pct(Δ30 HY))  *(stark momentum-getrieben — nur so ist „neutral 52.5" bei historisch engen Spreads (HY 2.75) erreichbar)*
+- **Risk Appetite** = 0.265·pct(Δ90 NASDAQ/SPX) + 0.208·pct(Δ90 SPX/Oil) + 0.527·(100−pct(VIX))
+- **USD Stress** = 0.458·pct(DXY) + 0.146·pct(Δ30 DXY) + 0.396·pct(VIX)   *(im MRI subtrahiert)*
+
+**Spread-Splice:** FRED liefert die ICE-BofA-Spreads (BAMLH0A0HYM2/BAMLC0A0CM) nur ~3 Jahre zurück.
+Davor werden Moody's-Spreads (BAA10Y/AAA10Y, ab 1985) verwendet, skaliert auf das Niveau-Verhältnis
+der Überlappungsperiode. FX für ECB/BoJ-Umrechnung: FRED DEXUSEU/DEXJPUS.
 
 Hilfswerkzeug: `python calib_probe.py` gibt die aktuellen Komponenten-Perzentile aus,
 falls später nachkalibriert werden soll.
