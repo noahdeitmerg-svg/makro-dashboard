@@ -140,7 +140,10 @@
   </div>
 
   <div class="sect">Analyse &amp; Detail</div>
-  <div class="grid cards" id="cards"></div>
+  <div class="grid charts" id="hist_wrap" style="display:none">
+    <div class="panel big"><div class="hdr" id="h_hist"></div><div class="ttl">Eigener Track-Record (live, wächst täglich)</div><div class="cwrap" style="height:200px"><canvas id="c_hist"></canvas></div><div class="ftr"><span id="f_hist_l"></span><span>MRI + Boden-/Top-Score aus history.csv — out-of-sample ab 10.06.2026</span></div></div>
+  </div>
+  <div class="grid cards" id="cards" style="margin-top:14px"></div>
 
   <div class="footer">
     <span>© AlphaCycle <span id="yr"></span> • Daten: FRED, Yahoo Finance • Engine: MRI 25/25/20/15/15</span>
@@ -293,10 +296,14 @@ if (M.crypto){
  /* Equity-Kurve: Signal-Strategie vs. Buy & Hold */
  if (c.equity){
   const E = c.equity, ET = E.dates.map(d=>+new Date(d+'T00:00:00Z'));
-  document.getElementById('h_eq').textContent = 'Strategie '+E.strat_x+'x (MaxDD '+E.strat_dd+'%) | Buy&Hold '+E.hold_x+'x (MaxDD '+E.hold_dd+'%)';
+  const epts = a => a.map((v,i)=>v==null?null:({x:ET[i],y:v})).filter(Boolean);
+  document.getElementById('h_eq').textContent = 'BTC: Strategie '+E.strat_x+'x (MaxDD '+E.strat_dd+'%) vs. Hold '+E.hold_x+'x (MaxDD '+E.hold_dd+'%)'+(E.eth_strat_x?' | ETH: '+E.eth_strat_x+'x vs. '+E.eth_hold_x+'x (Legende)':'');
   new Chart(document.getElementById('c_eq'),{type:'line',data:{datasets:[
-    {data:E.strat.map((v,i)=>({x:ET[i],y:v})),label:'Signal-Strategie',borderColor:'#34d399',borderWidth:1.7,pointRadius:0,pointHitRadius:8,tension:0},
-    {data:E.hold.map((v,i)=>({x:ET[i],y:v})),label:'Buy & Hold',borderColor:'#8b93a7',borderWidth:1.3,pointRadius:0,pointHitRadius:8,tension:0}]},
+    {data:epts(E.strat),label:'BTC Strategie',borderColor:'#34d399',borderWidth:1.7,pointRadius:0,pointHitRadius:8,tension:0},
+    {data:epts(E.hold),label:'BTC Hold',borderColor:'#8b93a7',borderWidth:1.3,pointRadius:0,pointHitRadius:8,tension:0},
+    ...(E.eth_strat?[
+    {data:epts(E.eth_strat),label:'ETH Strategie',borderColor:'#a78bfa',borderWidth:1.4,pointRadius:0,pointHitRadius:8,tension:0,hidden:true},
+    {data:epts(E.eth_hold),label:'ETH Hold',borderColor:'#5c6477',borderWidth:1.2,pointRadius:0,pointHitRadius:8,tension:0,hidden:true}]:[])]},
    options:{responsive:true,maintainAspectRatio:false,animation:false,parsing:false,
     interaction:{mode:'nearest',axis:'x',intersect:false},
     scales:{x:timeX(), y:{type:'logarithmic',ticks:{font:{size:10},callback:v=>{const l=Math.log10(v);return Number.isInteger(l)?v.toLocaleString('de-DE'):null}},grid:GRID}},
@@ -323,6 +330,33 @@ if (M.crypto){
 }
 for(const id of ['f_mri_l','f_ct_l','f_us_l','f_cb_l','f_gl_l','f_ca_l','f_rl_l']) document.getElementById(id).textContent=cp;
 
+/* ---------- Trigger-Karte: "Was muesste passieren?" ---------- */
+if (M.triggers){
+ const cc = document.getElementById('crypto_cards');
+ cc.innerHTML += `<div class="card" style="border-left-color:#fbbf24"><h3>Was müsste passieren? (Trigger-Distanz, täglich neu)</h3>` +
+  M.triggers.map(t=>`<div style="margin-bottom:10px"><div style="font-size:13px;font-weight:600;color:${t.color}">${t.name} — aktuell <span class="mono">${t.now}</span></div>` +
+   t.lines.map(l=>`<div class="sm mut" style="margin-top:3px">• ${l}</div>`).join('') + `</div>`).join('') + `</div>`;
+}
+/* ---------- Track-Record-Chart (eigene Score-Historie) ---------- */
+if (M.score_history && M.score_history.dates.length >= 2){
+ const S = M.score_history, ST = S.dates.map(d=>+new Date(d+'T00:00:00Z'));
+ document.getElementById('hist_wrap').style.display = '';
+ document.getElementById('h_hist').textContent = S.dates.length + ' Tage aufgezeichnet seit ' + S.dates[0];
+ new Chart(document.getElementById('c_hist'),{type:'line',data:{datasets:[
+  {data:S.mri.map((v,i)=>({x:ST[i],y:v})),label:'MRI',borderColor:'#38bdf8',borderWidth:1.8,pointRadius:2,tension:0},
+  {data:S.bottom.map((v,i)=>({x:ST[i],y:v})),label:'Boden-Score',borderColor:'#34d399',borderWidth:1.3,pointRadius:2,tension:0},
+  {data:S.top.map((v,i)=>({x:ST[i],y:v})),label:'Top-Score',borderColor:'#f87171',borderWidth:1.3,pointRadius:2,tension:0}]},
+ options:{responsive:true,maintainAspectRatio:false,animation:false,parsing:false,
+  interaction:{mode:'nearest',axis:'x',intersect:false},
+  scales:{x:timeX(), y:{min:0,max:100,ticks:{font:{size:10}},grid:GRID}},
+  plugins:{legend:{display:true,position:'top',align:'end',labels:{font:{size:10},boxWidth:14,boxHeight:2}},
+   tooltip:{callbacks:{title:items=>items.length?deDate(items[0].parsed.x):''}}}},
+ plugins:[watermark,bands()]});
+ document.getElementById('f_hist_l').textContent = cp;
+} else if (M.score_history){
+ document.getElementById('hist_wrap').style.display = '';
+ document.getElementById('h_hist').textContent = 'Aufzeichnung läuft seit ' + (M.score_history.dates[0]||'heute') + ' — Chart erscheint ab 2 Datenpunkten';
+}
 /* ---------- Karten ---------- */
 const cards = document.getElementById('cards');
 const lamp = l => l==='mixed' ? '<span class="light lyellow"></span><span class="light lyellow"></span><span class="light lred"></span>' : '<span class="light l'+l+'"></span>';

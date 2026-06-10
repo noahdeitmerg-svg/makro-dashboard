@@ -147,33 +147,66 @@ def compute_crypto(btc, eth, mri, liq, usd, risk, idx):
         'Top-Risiko-Trigger: Mayer >1.4 oder extreme 1J-Rendite, PLUS MRI-Region >65 bei nicht mehr steigender Liquiditaet. '
         'Signale markieren ZONEN (gestaffelt agieren/DCA), keine Exakt-Zeitpunkte.'
     )
-    # Strategie-Backtest (in-sample!): 100% BTC ab Start; Top-Signal -> Cash; Boden-Signal -> wieder 100%
+    # Strategie-Backtest (in-sample!): 100% ab Start; Top-Signal -> Cash; Boden-Signal -> wieder 100%
     bset, tset = set(sig_dates(bottom, 65)), set(sig_dates(top, 75, extra=price_heat))
     diso = [d.date().isoformat() for d in idx]
-    rets = btc.pct_change().fillna(0).values
-    fv = btc.first_valid_index(); fi = idx.get_loc(fv) if fv is not None else 0
-    state_pos, eq = 1.0, 100.0
-    eq_strat, eq_hold = [], []
-    for i in range(len(idx)):
-        if i <= fi: eq_strat.append(100.0); eq_hold.append(100.0); continue
-        if diso[i] in tset: state_pos = 0.0
-        if diso[i] in bset: state_pos = 1.0
-        eq = eq * (1 + rets[i]*state_pos)
-        eq_strat.append(eq)
-        eq_hold.append(100.0 * float(btc.iloc[i]/btc.iloc[fi]))
+    def run_equity(px):
+        rets = px.pct_change().fillna(0).values
+        fv = px.first_valid_index()
+        if fv is None: return None, None, 0
+        fi = idx.get_loc(fv)
+        pos, eq = 1.0, 100.0
+        es, eh = [None]*len(idx), [None]*len(idx)
+        es[fi] = eh[fi] = 100.0
+        for i in range(fi+1, len(idx)):
+            if diso[i] in tset: pos = 0.0
+            if diso[i] in bset: pos = 1.0
+            eq = eq * (1 + rets[i]*pos)
+            es[i] = eq; eh[i] = 100.0 * float(px.iloc[i]/px.iloc[fi])
+        return es, eh, fi
     def maxdd(a):
         peak, mdd = -1e9, 0.0
         for v in a:
+            if v is None: continue
             peak = max(peak, v); mdd = min(mdd, v/peak - 1)
         return round(mdd*100, 1)
+    eq_strat, eq_hold, fi = run_equity(btc)
+    eq_se, eq_he, fie = run_equity(eth)
     wk = list(range(fi, len(idx), 7)) + [len(idx)-1]
-    equity = {'dates': [diso[i] for i in wk], 'strat': [round(eq_strat[i],1) for i in wk], 'hold': [round(eq_hold[i],1) for i in wk],
+    rnd = lambda a: [None if (a[i] is None) else round(a[i],1) for i in wk]
+    equity = {'dates': [diso[i] for i in wk], 'strat': rnd(eq_strat), 'hold': rnd(eq_hold),
               'strat_x': round(eq_strat[-1]/100, 1), 'hold_x': round(eq_hold[-1]/100, 1),
-              'strat_dd': maxdd(eq_strat[fi:]), 'hold_dd': maxdd(eq_hold[fi:])}
+              'strat_dd': maxdd(eq_strat), 'hold_dd': maxdd(eq_hold)}
+    if eq_se:
+        equity.update({'eth_strat': rnd(eq_se), 'eth_hold': rnd(eq_he),
+            'eth_strat_x': round(eq_se[-1]/100,1), 'eth_hold_x': round(eq_he[-1]/100,1),
+            'eth_strat_dd': maxdd(eq_se), 'eth_hold_dd': maxdd(eq_he)})
+
+    # "Was muesste passieren?" - Distanz zum naechsten Signal, taeglich neu berechnet
+    ath = float(btc.cummax().iloc[-1]); ma200_now = float(ma200.iloc[-1])
+    mri_v, usd_v, btc_v = float(mri.iloc[-1]), float(usd.iloc[-1]), float(btc.iloc[-1])
+    P, ph_now = float(pain.iloc[-1]), float(price_heat.iloc[-1])
+    triggers = []
+    tl = []
+    if P >= 30:
+        cap_req = min(100.0, 65**2/max(P,1))
+        tl.append('Makro-Kapitulation noetig: MRI ≤ {:.1f} (aktuell {:.1f}) ODER USD-Stress ≥ {:.1f} (aktuell {:.1f})'.format(40-cap_req/5, mri_v, 60+cap_req/4, usd_v))
+    else:
+        pain_target = max(ath*(1-(0.45+30/250)), (0.85-30/200)*ma200_now)
+        tl.append('Preis-Schmerz erst {:.0f}/100 — fuer eine Kaufzone muesste BTC unter ~{:,.0f} $ (aktuell {:,.0f} $)'.format(P, pain_target, btc_v).replace(',','.'))
+        tl.append('PLUS Makro-Kapitulation: MRI < 40 (aktuell {:.1f}, fehlen {:.1f} Pkt) oder USD-Stress > 60 (aktuell {:.1f}, fehlen {:.1f} Pkt)'.format(mri_v, max(0,mri_v-40), usd_v, max(0,60-usd_v)))
+    triggers.append({'name':'Kaufzone (Boden-Score ≥ 65)', 'now': round(b_now,1), 'color':'#34d399', 'lines': tl})
+    tl2 = []
+    p365 = float(btc.iloc[-366]) if len(btc)>366 and btc.iloc[-366]==btc.iloc[-366] else None
+    routes = [(1.3+80/90)*ma200_now] + ([p365*4.2] if p365 else [])
+    tl2.append('Preis-Hitze noetig: BTC ueber ~{:,.0f} $ (aktuell {:,.0f} $)'.format(min(routes), btc_v).replace(',','.'))
+    tl2.append('PLUS Makro-Hitze: MRI ≥ ~63 (aktuell {:.1f}) bei nicht stark steigender Liquiditaet'.format(mri_v))
+    triggers.append({'name':'Top-Risiko (Top-Score ≥ 75)', 'now': round(t_now,1), 'color':'#f87171', 'lines': tl2})
 
     r0 = lambda s: [None if x!=x else int(round(float(x))) for x in s.values]
     return {
         'equity': equity,
+        'triggers': triggers,
         'btc': r0(btc), 'eth': [None if x!=x else round(float(x),2) for x in eth.values],
         'bottom_signals': sig_dates(bottom, 65), 'top_signals': sig_dates(top, 75, extra=price_heat),
         'bottom_now': round(b_now,1), 'top_now': round(t_now,1),
@@ -273,6 +306,13 @@ def main():
         al(Y['BTC-USD']).reindex(cut_idx), al(Y['ETH-USD']).reindex(cut_idx),
         pd.Series(series['mri'], index=cut_idx), pd.Series(series['liquidity'], index=cut_idx),
         pd.Series(series['usd_stress'], index=cut_idx), pd.Series(series['risk'], index=cut_idx), cut_idx)
+    # Regime-Trigger ergaenzen ("Was muesste passieren?")
+    mri_now = payload['headline']['mri']; usd_now = round(float(series['usd_stress'][-1]),1)
+    payload['triggers'] = payload['crypto']['triggers'] + [{
+        'name':'Regime-Wechsel (aktuell '+payload['headline']['regime']+')', 'now': mri_now, 'color':'#fbbf24',
+        'lines':['CONSTRUCTIVE ab MRI 55: es fehlen {:.1f} Punkte'.format(max(0,55-mri_now)),
+                 'DEFENSIVE unter MRI 40: Puffer {:.1f} Punkte'.format(max(0,mri_now-40)),
+                 'Stress-Override: USD-Stress ≥ 65 (aktuell {:.1f}) ohne schnellen Rueckgang wertet eine Stufe ab'.format(usd_now)]}]
     payload['updated'] = dt.datetime.now(dt.timezone.utc).strftime('%Y-%m-%d %H:%M UTC')
     out = os.path.join(HERE,'data.js')
     open(out,'w',encoding='utf-8').write('window.MACRO_DATA = ' + json.dumps(payload, ensure_ascii=False) + ';')
@@ -288,6 +328,14 @@ def main():
     lines = [l for l in lines if not l.startswith(dates[-1] + ',')]
     lines.append(row)
     open(hist_p, 'w', encoding='utf-8').write('\n'.join(lines) + '\n')
+    # Score-Historie (eigener Track-Record) ins Payload - waechst mit jedem Lauf
+    sh = {'dates': [], 'mri': [], 'bottom': [], 'top': []}
+    for l in lines[1:]:
+        p = l.split(',')
+        if len(p) >= 11:
+            sh['dates'].append(p[0]); sh['mri'].append(float(p[1])); sh['bottom'].append(float(p[9])); sh['top'].append(float(p[10]))
+    payload['score_history'] = sh
+    open(out,'w',encoding='utf-8').write('window.MACRO_DATA = ' + json.dumps(payload, ensure_ascii=False) + ';')
 
     # ---- Alerts: Regime-Wechsel + Signal-Zonen (Telegram, falls Token vorhanden) ----
     state_p = os.path.join(HERE,'state.json')
@@ -309,6 +357,18 @@ def main():
         sent = telegram('<b>AlphaCycle Alert</b> ({})\n'.format(dates[-1]) + '\n'.join(msgs) +
                  '\n\nMRI {} • Boden {} • Top {}\nhttps://noahdeitmerg-svg.github.io/makro-dashboard/'.format(h['mri'], c['bottom_now'], c['top_now']))
         print('Alerts:', len(msgs), '| Telegram gesendet:', sent)
+    # Sonntags-Digest (1x pro Woche, nur erster Lauf des Tages)
+    today = dt.date.today().isoformat()
+    cur['last_digest'] = prev.get('last_digest')
+    if dt.date.today().weekday() == 6 and prev.get('last_digest') != today:
+        dmsg = ('<b>AlphaCycle Wochen-Digest</b> ({})\n'.format(dates[-1]) +
+            '{} • MRI {} (7D {:+.1f} / 30D {:+.1f})\n'.format(h['regime'], h['mri'], h['mri_7d'], h['mri_30d']) +
+            'Pulse: ' + ' • '.join('{} {}'.format(p['name'].split('/')[0], p['value']) for p in payload['pulse']) + '\n' +
+            'Krypto: Boden {} | Top {} | Mayer {} | BTC {}% vom ATH\n'.format(c['bottom_now'], c['top_now'], c['mayer'], c['drawdown_pct']) +
+            'Naechste Trigger:\n' + '\n'.join('• ' + t['lines'][0] for t in payload['triggers'][:2]) +
+            '\nhttps://noahdeitmerg-svg.github.io/makro-dashboard/')
+        if telegram(dmsg):
+            cur['last_digest'] = today; print('Wochen-Digest gesendet.')
     json.dump(cur, open(state_p, 'w', encoding='utf-8'))
     print('OK ->', out)
     print('Regime:', h['regime'], '| MRI:', h['mri'], '| Sub-Scores:', {k:round(v,1) for k,v in subs_last.items()})
