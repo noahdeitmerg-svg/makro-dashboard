@@ -1,0 +1,8 @@
+api_keys.env
+api_keys.txt
+.env
+update_log.txt
+update.bat
+*.jpeg
+*.jpg
+__pycache__/

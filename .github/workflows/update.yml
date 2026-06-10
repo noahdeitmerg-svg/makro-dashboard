@@ -1,0 +1,30 @@
+name: Update Macro Data
+on:
+  schedule:
+    - cron: '15 7,13,19 * * *'   # 3x taeglich (UTC)
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install -r requirements.txt
+      - run: python update_data.py
+        env:
+          FRED_API_KEY: ${{ secrets.FRED_API_KEY }}
+          COINGECKO_API_KEY: ${{ secrets.COINGECKO_API_KEY }}
+      - name: Commit data.js
+        run: |
+          git config user.name "macro-bot"
+          git config user.email "actions@github.com"
+          cp dashboard.html index.html
+          git add data.js index.html
+          git diff --cached --quiet || git commit -m "data update $(date -u +%F_%H:%M)"
+          git push

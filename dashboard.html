@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#1e1f22">
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<title>Makro Dashboard – Macro Regime Index</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script src="data.js"></script>
+<style>
+  :root{--bg:#1e1f22;--card:#2b2d31;--card2:#313338;--txt:#dbdee1;--mut:#949ba4;--acc:#5865f2;}
+  *{box-sizing:border-box} body{margin:0;background:var(--bg);color:var(--txt);font-family:'Segoe UI',Roboto,Arial,sans-serif;padding:18px}
+  h1{font-size:20px;margin:0 0 4px} .sub{color:var(--mut);font-size:12px;margin-bottom:16px}
+  .badge{display:inline-flex;align-items:center;gap:8px;font-weight:700;font-size:18px;letter-spacing:.5px}
+  .dot{width:14px;height:14px;border-radius:50%} 
+  .grid{display:grid;gap:12px} .charts{grid-template-columns:repeat(auto-fit,minmax(min(420px,100%),1fr))}
+  @media (max-width:520px){body{padding:10px} .cwrap{height:200px} .big .cwrap{height:250px}}
+  .panel{background:#fff;border-radius:8px;padding:8px 10px 2px;color:#222}
+  .panel .hdr{font:10px/1.4 'DejaVu Sans',Verdana,sans-serif;color:#444}
+  .panel .ttl{text-align:center;font:13px 'DejaVu Sans',Verdana,sans-serif;color:#111;margin:-2px 0 2px}
+  .panel .ftr{display:flex;justify-content:space-between;font:9px 'DejaVu Sans',Verdana,sans-serif;color:#555;padding:1px 4px 4px}
+  .big{grid-column:1/-1} .cwrap{position:relative;height:240px} .big .cwrap{height:330px}
+  .cards{grid-template-columns:repeat(auto-fit,minmax(330px,1fr));margin-top:14px}
+  .card{background:var(--card);border-radius:8px;padding:14px 16px;border-left:4px solid var(--acc)}
+  .card h3{margin:0 0 8px;font-size:14px} .card .row{display:flex;justify-content:space-between;font-size:13px;padding:2px 0}
+  .card .row .k{color:var(--txt)} .card .row .v{color:var(--mut);font-variant-numeric:tabular-nums}
+  .mono{font-family:Consolas,monospace} .mut{color:var(--mut)} .sm{font-size:12px}
+  .light{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:6px}
+  .green{background:#43b581}.red{background:#f04747}.yellow{background:#faa61a}
+  .hero{background:var(--card);border-radius:8px;padding:16px 18px;margin-bottom:14px;border-left:4px solid #f5b942}
+  .kpis{font-size:14px;margin:8px 0;line-height:1.7}
+  .kpis b{font-size:16px} .tagline{color:var(--txt);font-size:13px;line-height:1.5}
+</style>
+</head>
+<body>
+<h1>MACRO Dashboard</h1>
+<div class="sub" id="updated"></div>
+<div class="hero" id="hero"></div>
+<div class="grid charts" id="charts">
+  <div class="panel big"><div class="hdr" id="h_mri"></div><div class="ttl">DeFi Circle - Macro Regime Index (0-100)</div><div class="cwrap"><canvas id="c_mri"></canvas></div><div class="ftr"><span id="f_mri_l"></span><span></span></div></div>
+  <div class="panel"><div class="hdr" id="h_ct"></div><div class="ttl">DeFi Circle - Credit Conditions Timing</div><div class="cwrap"><canvas id="c_ct"></canvas></div><div class="ftr"><span id="f_ct_l"></span><span>Higher = tighter credit • falling = easing</span></div></div>
+  <div class="panel"><div class="hdr" id="h_us"></div><div class="ttl">DeFi Circle - USD Funding Stress</div><div class="cwrap"><canvas id="c_us"></canvas></div><div class="ftr"><span id="f_us_l"></span><span>Higher = USD+VIX stress • falling = easing</span></div></div>
+  <div class="panel"><div class="hdr" id="h_cb"></div><div class="ttl">DeFi Circle - Central Bank Liquidity (USD)</div><div class="cwrap"><canvas id="c_cb"></canvas></div><div class="ftr"><span id="f_cb_l"></span><span></span></div></div>
+  <div class="panel"><div class="hdr"></div><div class="ttl">DeFi Circle - Global Liquidity (Daily, USD)</div><div class="cwrap"><canvas id="c_gl"></canvas></div><div class="ftr"><span id="f_gl_l"></span><span></span></div></div>
+  <div class="panel"><div class="hdr"></div><div class="ttl">DeFi Circle - Global Liquidity MTD% Candle</div><div class="cwrap"><canvas id="c_mtd"></canvas></div><div class="ftr"><span id="f_mtd_l"></span><span></span></div></div>
+  <div class="panel"><div class="hdr" id="h_ca"></div><div class="ttl">DeFi Circle - Cross Asset Regime</div><div class="cwrap"><canvas id="c_ca"></canvas></div><div class="ftr"><span id="f_ca_l"></span><span></span></div></div>
+  <div class="panel"><div class="hdr" id="h_rl"></div><div class="ttl">DeFi Circle - Relative Leadership</div><div class="cwrap"><canvas id="c_rl"></canvas></div><div class="ftr"><span id="f_rl_l"></span><span>scaled to its own +/-30 leadership range</span></div></div>
+</div>
+<div class="grid cards" id="cards"></div>
+<script>
+const M = window.MACRO_DATA, H = M.headline, D = M.dates, cp = '© DeFi Circle 2026 • ' + M.updated.slice(8,10)+'.'+M.updated.slice(5,7)+'.'+M.updated.slice(0,4);
+document.getElementById('updated').textContent = 'Window ' + M.window + 'd • Updated ' + M.updated + ' • Rebuild (lokal)';
+
+/* ---------- Hero / Regime-Badge ---------- */
+const lights = {green:'green',red:'red',yellow:'yellow'};
+document.getElementById('hero').style.borderLeftColor = H.regime_color;
+document.getElementById('hero').innerHTML = `
+  <div class="badge"><span class="dot" style="background:${H.regime_color}"></span>${H.regime}</div>
+  <div class="kpis">MRI <b>${H.mri}</b> • 7D <span class="mono">${fmt(H.mri_7d)} pts</span> • 30D <span class="mono">${fmt(H.mri_30d)} pts</span><br>
+  LIQUIDITY: ${H.liquidity_label} • Data Quality <span class="mono">${H.data_quality}/100</span> ${H.data_quality>=90?'HIGH':'MED'} • Regime Conviction <span class="mono">${H.conviction}/100</span> ${H.conviction>=65?'HIGH':(H.conviction>=55?'MED':'LOW')}</div>
+  <div class="tagline">${H.lage}</div>`;
+function fmt(x){return (x>0?'+':'')+x.toFixed(1)}
+
+/* ---------- Chart-Helfer (matplotlib-Look) ---------- */
+const watermark = {id:'wm', afterDraw(c){const{ctx,chartArea:a}=c; if(!a)return; ctx.save();ctx.font='26px Verdana';ctx.fillStyle='rgba(120,130,150,.18)';ctx.textAlign='center';ctx.fillText('defi circle',(a.left+a.right)/2,(a.top+a.bottom)/2+30);
+ ctx.beginPath();ctx.strokeStyle='rgba(120,130,220,.25)';ctx.lineWidth=10;ctx.arc((a.left+a.right)/2,(a.top+a.bottom)/2-15,22,0,7);ctx.stroke();ctx.restore();}};
+function bands(zones){return {id:'bands', beforeDatasetsDraw(c){const{ctx,chartArea:a,scales:{y}}=c; if(!a)return; ctx.save();
+ for(const z of zones){ctx.fillStyle=z.c; const y1=y.getPixelForValue(Math.min(z.hi,y.max)), y2=y.getPixelForValue(Math.max(z.lo,y.min)); ctx.fillRect(a.left,y1,a.right-a.left,y2-y1);}
+ for(const v of [40,50,60]){if(v<y.min||v>y.max)continue; ctx.strokeStyle=v==50?'rgba(80,80,80,.55)':(v==40?'rgba(200,60,60,.6)':'rgba(60,140,60,.6)');ctx.setLineDash([5,4]);ctx.lineWidth=1;ctx.beginPath();const yy=y.getPixelForValue(v);ctx.moveTo(a.left,yy);ctx.lineTo(a.right,yy);ctx.stroke();}
+ ctx.restore();}}}
+const ZONES=[{lo:60,hi:100,c:'rgba(225,240,238,.7)'},{lo:40,hi:60,c:'rgba(252,247,222,.7)'},{lo:0,hi:40,c:'rgba(251,235,238,.7)'}];
+const yearTicks = {};
+D.forEach((d,i)=>{const y=d.slice(0,4); if(!(y in yearTicks) && d.slice(5,7)==='01') yearTicks[y]=i;});
+function xopts(dates){return {type:'category', labels:dates, ticks:{autoSkip:false, maxRotation:0, font:{size:10}, color:'#333',
+  callback:(v,i)=>{const d=dates[i]; return (d.slice(5,10)==='01-01')?d.slice(0,4):null}}, grid:{color:'rgba(100,120,200,.25)', borderDash:[4,4], drawTicks:false, lineWidth:ctx=>ctx.tick&&ctx.tick.label?1:0}}}
+function mk(id,datasets,ymin,ymax,zoned,ylabel,dates,legend){ return new Chart(document.getElementById(id),{type:'line',
+ data:{labels:dates,datasets},
+ options:{responsive:true,maintainAspectRatio:false,animation:false,
+  interaction:{mode:'index',intersect:false},
+  scales:{x:xopts(dates), y:{min:ymin,max:ymax,title:{display:!!ylabel,text:ylabel,font:{size:10},color:'#333'},ticks:{font:{size:10},color:'#333'},grid:{display:false}}},
+  plugins:{legend:legend?{display:true,position:'chartArea',align:'start',labels:{font:{size:9},boxWidth:18,boxHeight:2,color:'#222'}}:{display:false},tooltip:{enabled:true}}},
+ plugins:[watermark].concat(zoned?[bands(ZONES)]:[])});}
+const line=(data,color,label,w)=>({data,label:label||'',borderColor:color,borderWidth:w||1.4,pointRadius:0,tension:0,fill:false});
+
+/* ---------- Charts ---------- */
+document.getElementById('h_mri').textContent = M.chart_headers.mri;
+mk('c_mri',[line(M.series.mri,'#1f6fb4','MRI',1.6)],0,100,true,'MRI (0-100)',D);
+document.getElementById('h_ct').textContent = M.chart_headers.credit_timing;
+mk('c_ct',[line(M.series.credit_timing,'#1f6fb4')],0,100,true,'Pressure (0-100)',D);
+document.getElementById('h_us').textContent = M.chart_headers.usd_stress;
+mk('c_us',[line(M.series.usd_stress,'#1f6fb4')],0,100,true,'Pressure (0-100)',D);
+const cl=M.chart_headers.cb_legend;
+document.getElementById('h_cb').textContent = M.chart_headers.cb;
+mk('c_cb',[line(M.series.ecb,'#2ca02c','ECB ('+cl.ecb+'T)'),line(M.series.fed,'#1f6fb4','Fed ('+cl.fed+'T)'),line(M.series.pboc,'#e8900c','PBoC ('+cl.pboc+'T)'),line(M.series.boj,'#d62728','BoJ ('+cl.boj+'T)')],4,10,false,'Assets (T USD)',D,true);
+mk('c_gl',[line(M.series.glob,'#111','',1.5)],null,null,false,'Assets (T USD)',D);
+/* MTD% Candle: Monats-Prozentaenderung der globalen Liquiditaet */
+(function(){const g=M.series.glob; const months={}; D.forEach((d,i)=>{const m=d.slice(0,7); (months[m]=months[m]||[]).push(i)});
+ const lab=Object.keys(months).sort(); const pct=lab.map(m=>{const ix=months[m]; return (g[ix[ix.length-1]]/g[ix[0]]-1)*100});
+ const ma=pct.map((_,i)=>{const s=pct.slice(Math.max(0,i-2),i+1); return s.reduce((a,b)=>a+b,0)/s.length});
+ new Chart(document.getElementById('c_mtd'),{data:{labels:lab,datasets:[
+   {type:'bar',data:pct,backgroundColor:pct.map(v=>v>=0?'rgba(44,160,44,.85)':'rgba(214,39,40,.85)')},
+   {type:'line',data:ma,borderColor:'#1f6fb4',borderWidth:1.5,pointRadius:0,tension:.3}]},
+  options:{responsive:true,maintainAspectRatio:false,animation:false,
+   scales:{x:{ticks:{autoSkip:false,maxRotation:0,font:{size:10},color:'#333',callback:(v,i)=>lab[i].slice(5,7)==='01'?lab[i].slice(0,4):null},grid:{color:'rgba(100,120,200,.25)',borderDash:[4,4]}},
+   y:{title:{display:true,text:'MTD %',font:{size:10},color:'#333'},ticks:{font:{size:10},color:'#333'}}},plugins:{legend:{display:false}}},plugins:[watermark]});
+ document.getElementById('f_mtd_l').textContent=cp;})();
+document.getElementById('h_ca').textContent='SPX/Oil '+M.cross_asset.spx_oil+' | ETH/SPX '+M.leadership[0][1].slice(0,-3)+' | '+M.cross_asset.phase;
+mk('c_ca',[line(M.series.cross,'#111','',1.5)],0,100,true,'',D);
+document.getElementById('h_rl').textContent='ETH/SPX ('+M.leadership[0][1].slice(0,-1)+') | SPX/Oil ('+M.leadership[2][1].slice(0,-1)+')';
+mk('c_rl',[line(M.series.eth_spx,'#1f6fb4','ETH/SPX'),line(M.series.btc_spx,'#d62728','BTC/SPX'),line(M.series.spx_oil,'#2ca02c','SPX/Oil'),line(M.series.eth_btc,'#e8900c','ETH/BTC')],-32,32,false,'',D,true);
+for(const id of ['f_mri_l','f_ct_l','f_us_l','f_cb_l','f_gl_l','f_ca_l','f_rl_l']) document.getElementById(id).textContent=cp;
+
+/* ---------- Text-Karten ---------- */
+const cards=document.getElementById('cards'); const lamp=l=>l==='mixed'?'<span class="light yellow"></span><span class="light yellow"></span><span class="light red"></span>':'<span class="light '+l+'"></span>';
+function card(title,html,color){const el=document.createElement('div');el.className='card';if(color)el.style.borderLeftColor=color;el.innerHTML='<h3>'+title+'</h3>'+html;cards.appendChild(el);}
+card('Investor View',`<div class="tagline">${H.investor}</div><div class="sm mut" style="margin-top:8px">Conviction: ${H.conviction}/100 ${H.conviction>=55?'MED':'LOW'}<br>Watch: ${H.watch}</div>`,H.regime_color);
+card('VIX Regime',`<div class="kpis" style="margin:0 0 6px"><b>${M.vix.regime}</b> • VIX ${M.vix.value} • 7D ${fmt(M.vix.d7)} pts • 30D ${fmt(M.vix.d30)} pts • Support ${M.vix.support}/100</div>
+ <div class="tagline">${M.vix.note}</div><div class="sm mut" style="margin-top:6px">DXY 30D ${(M.vix.dxy_30d_pct>0?'+':'')+M.vix.dxy_30d_pct}% • USD Stress ${fmt(M.vix.usd_stress_7d)} pts/7D • HY -0.0 pts/30D • IG -0.0 pts/30D</div>`);
+card('Pulse', M.pulse.map(p=>`<div class="row"><span class="k"><b>${p.name}:</b></span><span class="v mono">${p.value.toFixed(1)} • ${p.trends}</span></div>`).join(''));
+card('What Changed', M.what_changed.map(w=>`<div class="row"><span class="k">${w[0]}:</span><span class="v mono">${w[1]} (${w[2]})</span></div>`).join(''));
+card('Macro Releases', M.releases.map(r=>`<div class="row"><span class="k">${r[0]}:</span><span class="v mono">${r[1]} • ${r[2]} (${r[3]})</span></div>`).join(''));
+card('Top Drivers', M.top_drivers.map(t=>`<div class="row"><span class="k">${t[0]}:</span><span class="v mono">${(t[1]>0?'+':'')+t[1].toFixed(2)} (${t[2]})</span></div>`).join(''));
+card('Cross-Asset Phase',`<div class="tagline">${M.cross_asset.phase} • ${M.cross_asset.confidence} confidence<br>NASDAQ/SPX ${M.cross_asset.nasdaq_spx} | SPX/Oil ${M.cross_asset.spx_oil}</div>`);
+card('Relative Leadership', M.leadership.map(l=>`<div class="row"><span class="k">${l[0]}:</span><span class="v mono">${l[1]}</span></div>`).join(''));
+card('Key Levels', M.key_levels.map(k=>`<div class="row"><span class="k">${lamp(k.light)}<b>${k.name}:</b></span><span class="v mono">${k.value}${k.detail?' '+k.detail:''}</span></div>`).join(''), '#43b581');
+card('Chart Window / History',`<div class="row"><span class="k">Chart Window</span><span class="v">${M.window}d</span></div><div class="row"><span class="k">History</span><span class="v">${M.window}d</span></div><div class="row"><span class="k">Updated</span><span class="v">${M.updated}</span></div>`);
+if('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js');
+</script>
+</body>
+</html>
