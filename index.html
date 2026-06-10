@@ -64,7 +64,9 @@
   .grid{display:grid;gap:14px} .charts{grid-template-columns:repeat(auto-fit,minmax(min(440px,100%),1fr))}
   .panel{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:12px 14px 6px;position:relative;transition:border-color .2s}
   .panel:hover{border-color:#2a3754}
-  .panel .hdr{font-size:10.5px;color:var(--dim);font-family:'JetBrains Mono',monospace}
+  .panel .hdr{font-size:10.5px;color:var(--dim);font-family:'JetBrains Mono',monospace;padding-right:150px;min-height:13px}
+  @media(max-width:560px){.panel .hdr{padding-right:0;margin-top:26px} .tbtn{padding:3px 6px;font-size:11px}}
+  @media(max-width:430px){.tbtn.opt{display:none}}
   .panel .ttl{font-size:13.5px;font-weight:600;color:var(--txt);margin:2px 0 6px}
   .panel .ftr{display:flex;justify-content:space-between;gap:8px;font-size:10px;color:var(--dim);padding:4px 2px 4px;flex-wrap:wrap}
   .big{grid-column:1/-1}
@@ -247,8 +249,18 @@ mk('c_gl',[line(M.series.glob,'#e6eaf2','',1.5)],null,null,false,'T USD');
  document.getElementById('f_mtd_l').textContent=cp;})();
 document.getElementById('h_ca').textContent = 'SPX/Oil '+M.cross_asset.spx_oil+' | '+M.cross_asset.phase;
 mk('c_ca',[line(M.series.cross,'#e6eaf2','',1.5)],0,100,true,'');
-document.getElementById('h_rl').textContent = 'ETH/SPX ('+M.leadership[0][1].slice(0,-1)+') | SPX/Oil ('+M.leadership[2][1].slice(0,-1)+')';
-mk('c_rl',[line(M.series.eth_spx,'#38bdf8','ETH/SPX',1.2),line(M.series.btc_spx,'#f87171','BTC/SPX',1.2),line(M.series.spx_oil,'#34d399','SPX/Oil',1.2),line(M.series.eth_btc,'#fbbf24','ETH/BTC',1.2)],-32,32,false,'',true);
+document.getElementById('h_rl').textContent = 'ETH/SPX ('+M.leadership[0][1].slice(0,-1)+') | SPX/Oil ('+M.leadership[2][1].slice(0,-1)+') • 21T-geglättet • Legende = ein/aus';
+/* 21-Tage-Glättung fuer Lesbarkeit; BTC/SPX + ETH/BTC initial ausgeblendet (per Legende zuschaltbar) */
+function sma(arr, w){ const out = new Array(arr.length).fill(null); let sum=0, cnt=0; const q=[];
+ for(let i=0;i<arr.length;i++){ const v=arr[i]; q.push(v); if(v!=null){sum+=v;cnt++;}
+  if(q.length>w){ const o=q.shift(); if(o!=null){sum-=o;cnt--;} }
+  out[i] = cnt>=Math.min(w,10) ? sum/cnt : null; }
+ return out; }
+const rlChart = mk('c_rl',[
+ Object.assign(line(sma(M.series.eth_spx,21),'#38bdf8','ETH/SPX',1.6)),
+ Object.assign(line(sma(M.series.btc_spx,21),'#f87171','BTC/SPX',1.6),{hidden:true}),
+ Object.assign(line(sma(M.series.spx_oil,21),'#34d399','SPX/Oil',1.6)),
+ Object.assign(line(sma(M.series.eth_btc,21),'#fbbf24','ETH/BTC',1.6),{hidden:true})],-32,32,false,'',true);
 
 /* ---------- Krypto ---------- */
 if (M.crypto){
@@ -327,10 +339,15 @@ card('Relative Leadership', M.leadership.map(l=>`<div class="row"><span class="k
 card('Key Levels', M.key_levels.map(k=>`<div class="row"><span class="k">${lamp(k.light)}<b>${k.name}</b></span><span class="v">${k.value}${k.detail?' '+k.detail:''}</span></div>`).join(''),'#34d399');
 card('System',`<div class="row"><span class="k">Chart-Historie</span><span class="v">${M.window} Tage (seit ${D[0].slice(0,4)})</span></div><div class="row"><span class="k">Score-Fenster</span><span class="v">2200 Tage rollierend</span></div><div class="row"><span class="k">Updated</span><span class="v">${M.updated}</span></div><div class="row"><span class="k">Update-Rhythmus</span><span class="v">3× täglich (GitHub Action)</span></div>`);
 
+/* Default-Zeitraeume fuer dichte Charts (Max-Button zeigt wieder alles) */
+const defRange = (id,yrs) => { const ch = Chart.getChart(document.getElementById(id));
+ if(ch && ch.zoomScale){ const max=T[T.length-1]; ch.zoomScale('x',{min:max-yrs*365.25*864e5,max:max},'none'); } };
+defRange('c_rl',3); defRange('c_mtd',5); defRange('c_ca',5);
+
 /* ---------- Interaktion: Vollbild + Zoom-Reset ---------- */
 document.querySelectorAll('.panel').forEach(p=>{
   const tb=document.createElement('div'); tb.className='tools';
-  tb.innerHTML='<button class="tbtn">1J</button><button class="tbtn">3J</button><button class="tbtn">5J</button><button class="tbtn" title="Alles">Max</button><button class="tbtn" title="Vollbild">⛶</button>';
+  tb.innerHTML='<button class="tbtn">1J</button><button class="tbtn opt">3J</button><button class="tbtn opt">5J</button><button class="tbtn" title="Alles">Max</button><button class="tbtn" title="Vollbild">⛶</button>';
   const btns=tb.querySelectorAll('button');
   const getC=()=>Chart.getChart(p.querySelector('canvas'));
   const range=yrs=>{const ch=getC(); if(!ch)return; if(!yrs){if(ch.resetZoom)ch.resetZoom(); return;}
