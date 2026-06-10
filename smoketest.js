@@ -5,7 +5,7 @@ const scripts = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)].map(m=>m[1])
 const els = {};
 const mkEl = () => ({textContent:'',innerHTML:'',style:{},className:'',children:[],
   appendChild(c){this.children.push(c)}, insertBefore(c){this.children.unshift(c)},
-  querySelector(){return mkEl()}, querySelectorAll(){return [mkEl(),mkEl()]},
+  querySelector(){return mkEl()}, querySelectorAll(){return Array.from({length:6},mkEl)},
   get lastChild(){return this.children[this.children.length-1]||mkEl()}});
 global.document = {getElementById:id=>els[id]||(els[id]=mkEl()), createElement:()=>mkEl(),
   querySelectorAll:sel=>sel==='.panel'?Array.from({length:10},mkEl):[]};

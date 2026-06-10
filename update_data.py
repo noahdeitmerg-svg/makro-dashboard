@@ -16,7 +16,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 WINDOW = 2200
 
 def load_keys():
-    keys = {k: os.environ[k] for k in ('FRED_API_KEY','COINGECKO_API_KEY') if os.environ.get(k)}
+    keys = {k: os.environ[k] for k in ('FRED_API_KEY','COINGECKO_API_KEY','TELEGRAM_BOT_TOKEN','TELEGRAM_CHAT_ID','TWELVEDATA_API_KEY') if os.environ.get(k)}
     for fn in ('api_keys.env','.env','api_keys.txt'):
         p = os.path.join(HERE, fn)
         if os.path.exists(p):
@@ -33,10 +33,53 @@ def fred(series_id, key, start):
     s = pd.Series({o['date']: float(o['value']) for o in obs if o['value'] not in ('.','')})
     s.index = pd.to_datetime(s.index); return s.sort_index()
 
+KEYS = {}
+
+def _stooq(sym):
+    m = {'^GSPC':'^spx','^IXIC':'^ndq','CL=F':'cl.f'}
+    if sym not in m: return None
+    r = requests.get('https://stooq.com/q/d/l/?s={}&i=d'.format(m[sym]), timeout=30)
+    import io
+    df = pd.read_csv(io.StringIO(r.text), index_col=0, parse_dates=True)
+    return df['Close'] if 'Close' in df else None
+
+def _coingecko(sym):
+    m = {'BTC-USD':'bitcoin','ETH-USD':'ethereum'}
+    if sym not in m: return None
+    hdr = {'x-cg-demo-api-key': KEYS['COINGECKO_API_KEY']} if KEYS.get('COINGECKO_API_KEY') else {}
+    r = requests.get('https://api.coingecko.com/api/v3/coins/{}/market_chart'.format(m[sym]),
+                     params={'vs_currency':'usd','days':'max','interval':'daily'}, headers=hdr, timeout=30)
+    px = r.json().get('prices', [])
+    if not px: return None
+    s = pd.Series({pd.Timestamp(p[0], unit='ms').normalize(): p[1] for p in px})
+    return s.sort_index()
+
 def yahoo(sym, start):
-    import yfinance as yf
-    df = yf.download(sym, start=start, progress=False, auto_adjust=True)
-    return df['Close'][sym] if hasattr(df['Close'],'columns') else df['Close']
+    """Yahoo mit Fallbacks: Stooq (Aktien/Oel), CoinGecko (Krypto)."""
+    try:
+        import yfinance as yf
+        df = yf.download(sym, start=start, progress=False, auto_adjust=True)
+        s = df['Close'][sym] if hasattr(df['Close'],'columns') else df['Close']
+        if s is not None and len(s) > 100: return s
+    except Exception as e:
+        print('  Yahoo-Fehler', sym, str(e)[:60])
+    for fb in (_stooq, _coingecko):
+        try:
+            s = fb(sym)
+            if s is not None and len(s) > 100:
+                print('  Fallback aktiv fuer', sym, '({})'.format(fb.__name__)); return s
+        except Exception: pass
+    raise RuntimeError('Keine Quelle fuer ' + sym)
+
+def telegram(msg):
+    tok, chat = KEYS.get('TELEGRAM_BOT_TOKEN'), KEYS.get('TELEGRAM_CHAT_ID')
+    if not tok or not chat: return False
+    try:
+        r = requests.post('https://api.telegram.org/bot{}/sendMessage'.format(tok),
+            json={'chat_id': chat, 'text': msg, 'parse_mode': 'HTML', 'disable_web_page_preview': True}, timeout=15)
+        return r.ok
+    except Exception as e:
+        print('Telegram-Fehler:', str(e)[:80]); return False
 
 def pct_rank(s, window=WINDOW):
     """Rollierendes Perzentil 0-100 (Kalibrierungs-Kern aller Sub-Scores)."""
@@ -104,8 +147,33 @@ def compute_crypto(btc, eth, mri, liq, usd, risk, idx):
         'Top-Risiko-Trigger: Mayer >1.4 oder extreme 1J-Rendite, PLUS MRI-Region >65 bei nicht mehr steigender Liquiditaet. '
         'Signale markieren ZONEN (gestaffelt agieren/DCA), keine Exakt-Zeitpunkte.'
     )
+    # Strategie-Backtest (in-sample!): 100% BTC ab Start; Top-Signal -> Cash; Boden-Signal -> wieder 100%
+    bset, tset = set(sig_dates(bottom, 65)), set(sig_dates(top, 75, extra=price_heat))
+    diso = [d.date().isoformat() for d in idx]
+    rets = btc.pct_change().fillna(0).values
+    fv = btc.first_valid_index(); fi = idx.get_loc(fv) if fv is not None else 0
+    state_pos, eq = 1.0, 100.0
+    eq_strat, eq_hold = [], []
+    for i in range(len(idx)):
+        if i <= fi: eq_strat.append(100.0); eq_hold.append(100.0); continue
+        if diso[i] in tset: state_pos = 0.0
+        if diso[i] in bset: state_pos = 1.0
+        eq = eq * (1 + rets[i]*state_pos)
+        eq_strat.append(eq)
+        eq_hold.append(100.0 * float(btc.iloc[i]/btc.iloc[fi]))
+    def maxdd(a):
+        peak, mdd = -1e9, 0.0
+        for v in a:
+            peak = max(peak, v); mdd = min(mdd, v/peak - 1)
+        return round(mdd*100, 1)
+    wk = list(range(fi, len(idx), 7)) + [len(idx)-1]
+    equity = {'dates': [diso[i] for i in wk], 'strat': [round(eq_strat[i],1) for i in wk], 'hold': [round(eq_hold[i],1) for i in wk],
+              'strat_x': round(eq_strat[-1]/100, 1), 'hold_x': round(eq_hold[-1]/100, 1),
+              'strat_dd': maxdd(eq_strat[fi:]), 'hold_dd': maxdd(eq_hold[fi:])}
+
     r0 = lambda s: [None if x!=x else int(round(float(x))) for x in s.values]
     return {
+        'equity': equity,
         'btc': r0(btc), 'eth': [None if x!=x else round(float(x),2) for x in eth.values],
         'bottom_signals': sig_dates(bottom, 65), 'top_signals': sig_dates(top, 75, extra=price_heat),
         'bottom_now': round(b_now,1), 'top_now': round(t_now,1),
@@ -115,7 +183,7 @@ def compute_crypto(btc, eth, mri, liq, usd, risk, idx):
     }
 
 def main():
-    keys = load_keys()
+    keys = load_keys(); KEYS.update(keys)
     if 'FRED_API_KEY' not in keys:
         sys.exit('FEHLER: FRED_API_KEY fehlt in api_keys.env (kostenlos: https://fred.stlouisfed.org/docs/api/api_key.html)')
     K = keys['FRED_API_KEY']
@@ -127,7 +195,8 @@ def main():
     print('Lade Yahoo...')
     Y = {s: yahoo(s, start) for s in ['^GSPC','^IXIC','CL=F','BTC-USD','ETH-USD']}
 
-    idx = pd.date_range(start='1990-01-01', end=pd.Timestamp.today().normalize(), freq='D')
+    # Tagesschluss-Fix: nur bis GESTERN rechnen, damit Deltas nicht intraday springen
+    idx = pd.date_range(start='1990-01-01', end=pd.Timestamp.today().normalize() - pd.Timedelta(days=1), freq='D')
     al = lambda s: s.reindex(s.index.union(idx)).ffill().reindex(idx)
 
     # Zentralbanken in T USD
@@ -204,9 +273,43 @@ def main():
         al(Y['BTC-USD']).reindex(cut_idx), al(Y['ETH-USD']).reindex(cut_idx),
         pd.Series(series['mri'], index=cut_idx), pd.Series(series['liquidity'], index=cut_idx),
         pd.Series(series['usd_stress'], index=cut_idx), pd.Series(series['risk'], index=cut_idx), cut_idx)
+    payload['updated'] = dt.datetime.now(dt.timezone.utc).strftime('%Y-%m-%d %H:%M UTC')
     out = os.path.join(HERE,'data.js')
     open(out,'w',encoding='utf-8').write('window.MACRO_DATA = ' + json.dumps(payload, ensure_ascii=False) + ';')
-    h = payload['headline']
+    h = payload['headline']; c = payload['crypto']
+
+    # ---- Track-Record: history.csv (1 Zeile pro Handelstag, dedupliziert) ----
+    hist_p = os.path.join(HERE,'history.csv')
+    header = 'date,mri,liquidity,growth,credit,risk,usd_stress,regime,conviction,bottom_score,top_score,btc,eth'
+    pulse_vals = [p['value'] for p in payload['pulse']]
+    row = ','.join(str(x) for x in [dates[-1], h['mri'], *pulse_vals, h['regime'], h['conviction'],
+                                    c['bottom_now'], c['top_now'], c['btc'][-1], c['eth'][-1]])
+    lines = [l for l in open(hist_p, encoding='utf-8').read().splitlines() if l.strip()] if os.path.exists(hist_p) else [header]
+    lines = [l for l in lines if not l.startswith(dates[-1] + ',')]
+    lines.append(row)
+    open(hist_p, 'w', encoding='utf-8').write('\n'.join(lines) + '\n')
+
+    # ---- Alerts: Regime-Wechsel + Signal-Zonen (Telegram, falls Token vorhanden) ----
+    state_p = os.path.join(HERE,'state.json')
+    prev = json.load(open(state_p, encoding='utf-8')) if os.path.exists(state_p) else {}
+    cur = {'regime': h['regime'], 'bottom_zone': c['bottom_now'] >= 65, 'top_zone': c['top_now'] >= 75, 'mri': h['mri']}
+    msgs = []
+    if prev:
+        if prev.get('regime') != cur['regime']:
+            msgs.append('Regime-Wechsel: {} → <b>{}</b> (MRI {})'.format(prev.get('regime'), cur['regime'], h['mri']))
+        if not prev.get('bottom_zone') and cur['bottom_zone']:
+            msgs.append('🟢 <b>KAUFZONE aktiv</b> — Boden-Score {}/100. {}'.format(c['bottom_now'], c['phase']))
+        if prev.get('bottom_zone') and not cur['bottom_zone']:
+            msgs.append('Kaufzone beendet (Boden-Score {}/100).'.format(c['bottom_now']))
+        if not prev.get('top_zone') and cur['top_zone']:
+            msgs.append('🔴 <b>TOP-RISIKO aktiv</b> — Top-Score {}/100. Gestaffeltes De-Risking pruefen.'.format(c['top_now']))
+        if prev.get('top_zone') and not cur['top_zone']:
+            msgs.append('Top-Risiko-Zone beendet (Top-Score {}/100).'.format(c['top_now']))
+    if msgs:
+        sent = telegram('<b>AlphaCycle Alert</b> ({})\n'.format(dates[-1]) + '\n'.join(msgs) +
+                 '\n\nMRI {} • Boden {} • Top {}\nhttps://noahdeitmerg-svg.github.io/makro-dashboard/'.format(h['mri'], c['bottom_now'], c['top_now']))
+        print('Alerts:', len(msgs), '| Telegram gesendet:', sent)
+    json.dump(cur, open(state_p, 'w', encoding='utf-8'))
     print('OK ->', out)
     print('Regime:', h['regime'], '| MRI:', h['mri'], '| Sub-Scores:', {k:round(v,1) for k,v in subs_last.items()})
     if not dq_pboc: print('Hinweis: PBoC ohne Live-Quelle (pboc_assets.csv anlegen fuer 100/100 Data Quality).')

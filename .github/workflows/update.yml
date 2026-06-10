@@ -7,6 +7,10 @@ on:
 permissions:
   contents: write
 
+concurrency:
+  group: update-data
+  cancel-in-progress: false
+
 jobs:
   update:
     runs-on: ubuntu-latest
@@ -20,11 +24,14 @@ jobs:
         env:
           FRED_API_KEY: ${{ secrets.FRED_API_KEY }}
           COINGECKO_API_KEY: ${{ secrets.COINGECKO_API_KEY }}
-      - name: Commit data.js
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+      - name: Commit results
         run: |
           git config user.name "macro-bot"
           git config user.email "actions@github.com"
           cp dashboard.html index.html
-          git add data.js index.html
+          git add data.js index.html history.csv state.json
           git diff --cached --quiet || git commit -m "data update $(date -u +%F_%H:%M)"
+          git pull --rebase origin main || true
           git push

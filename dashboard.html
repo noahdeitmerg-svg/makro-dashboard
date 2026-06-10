@@ -113,7 +113,8 @@
 
   <div class="sect">Krypto-Zyklus</div>
   <div class="grid charts">
-    <div class="panel big"><div class="hdr" id="h_cr"></div><div class="ttl">BTC &amp; ETH vs. Macro Regime (log)</div><div class="cwrap"><canvas id="c_cr"></canvas></div><div class="ftr"><span id="f_cr_l"></span><span>▲ Boden-Signal (Kaufzone) • ▼ Top-Signal (De-Risking)</span></div></div>
+    <div class="panel big"><div class="hdr" id="h_cr"></div><div class="ttl">BTC &amp; ETH vs. Macro Regime (log)</div><div class="cwrap"><canvas id="c_cr"></canvas></div><div class="ftr"><span id="f_cr_l"></span><span>Hintergrund = MRI-Zone • ▲ Boden-Signal • ▼ Top-Signal</span></div></div>
+    <div class="panel big"><div class="hdr" id="h_eq"></div><div class="ttl">Signal-Strategie vs. Buy &amp; Hold (BTC, Start = 100, log)</div><div class="cwrap"><canvas id="c_eq"></canvas></div><div class="ftr"><span id="f_eq_l"></span><span>Regel: Top-Signal → Cash, Boden-Signal → 100% BTC (in-sample)</span></div></div>
   </div>
   <div class="grid cards" id="crypto_cards" style="margin-top:14px"></div>
 
@@ -254,6 +255,17 @@ if (M.crypto){
  const c = M.crypto, idxOf = {}; D.forEach((d,i)=>idxOf[d]=i);
  document.getElementById('h_cr').textContent = 'Boden-Score '+c.bottom_now+'/100 | Top-Score '+c.top_now+'/100 | Mayer '+(c.mayer==null?'n/a':c.mayer)+' | BTC '+c.drawdown_pct+'% vom ATH';
  const mark = sigs => (sigs||[]).map(s=>{const i=idxOf[s]; return (i!=null&&c.btc[i]!=null)?{x:T[i],y:c.btc[i]}:null}).filter(Boolean);
+ /* MRI-Zonen als Hintergrund-Segmente vorberechnen */
+ const zoneOf = v => v==null?null:(v>=55?'g':(v<40?'r':null));
+ const segs=[]; let z0=null, x0=null;
+ for(let i=0;i<D.length;i++){ const z=zoneOf(M.series.mri[i]);
+  if(z!==z0){ if(z0&&x0!=null) segs.push({a:x0,b:T[i],z:z0}); z0=z; x0=T[i]; } }
+ if(z0&&x0!=null) segs.push({a:x0,b:T[T.length-1],z:z0});
+ const regimeBg = {id:'rbg', beforeDatasetsDraw(ch){const{ctx,chartArea:ar,scales:{x}}=ch; if(!ar)return; ctx.save();
+  for(const s of segs){ const xa=Math.max(ar.left,x.getPixelForValue(s.a)), xb=Math.min(ar.right,x.getPixelForValue(s.b));
+   if(xb<=ar.left||xa>=ar.right)continue;
+   ctx.fillStyle = s.z==='g'?'rgba(52,211,153,.07)':'rgba(248,113,113,.07)';
+   ctx.fillRect(xa,ar.top,xb-xa,ar.bottom-ar.top);} ctx.restore();}};
  new Chart(document.getElementById('c_cr'),{type:'line',data:{datasets:[
    line(c.btc,'#fbbf24','BTC',1.6), line(c.eth,'#a78bfa','ETH',1.2),
    {data:mark(c.bottom_signals),label:'Boden',pointStyle:'triangle',pointRadius:9,pointHoverRadius:12,pointBackgroundColor:'#34d399',pointBorderColor:'#10b981',borderWidth:0,showLine:false},
@@ -264,8 +276,23 @@ if (M.crypto){
    plugins:{decimation:{enabled:true,algorithm:'lttb',samples:900,threshold:1200},
     legend:{display:true,position:'top',align:'end',labels:{font:{size:10},boxWidth:14,boxHeight:2}},
     tooltip:{enabled:true,callbacks:{title:items=>items.length?deDate(items[0].parsed.x):''}}, zoom:ZOOM}},
-  plugins:[watermark]});
+  plugins:[watermark, regimeBg]});
  document.getElementById('f_cr_l').textContent = cp;
+ /* Equity-Kurve: Signal-Strategie vs. Buy & Hold */
+ if (c.equity){
+  const E = c.equity, ET = E.dates.map(d=>+new Date(d+'T00:00:00Z'));
+  document.getElementById('h_eq').textContent = 'Strategie '+E.strat_x+'x (MaxDD '+E.strat_dd+'%) | Buy&Hold '+E.hold_x+'x (MaxDD '+E.hold_dd+'%)';
+  new Chart(document.getElementById('c_eq'),{type:'line',data:{datasets:[
+    {data:E.strat.map((v,i)=>({x:ET[i],y:v})),label:'Signal-Strategie',borderColor:'#34d399',borderWidth:1.7,pointRadius:0,pointHitRadius:8,tension:0},
+    {data:E.hold.map((v,i)=>({x:ET[i],y:v})),label:'Buy & Hold',borderColor:'#8b93a7',borderWidth:1.3,pointRadius:0,pointHitRadius:8,tension:0}]},
+   options:{responsive:true,maintainAspectRatio:false,animation:false,parsing:false,
+    interaction:{mode:'nearest',axis:'x',intersect:false},
+    scales:{x:timeX(), y:{type:'logarithmic',ticks:{font:{size:10},callback:v=>{const l=Math.log10(v);return Number.isInteger(l)?v.toLocaleString('de-DE'):null}},grid:GRID}},
+    plugins:{legend:{display:true,position:'top',align:'end',labels:{font:{size:10},boxWidth:14,boxHeight:2}},
+     tooltip:{callbacks:{title:items=>items.length?deDate(items[0].parsed.x):''}}, zoom:ZOOM}},
+   plugins:[watermark]});
+  document.getElementById('f_eq_l').textContent = cp;
+ }
  const cc = document.getElementById('crypto_cards');
  cc.innerHTML = `
   <div class="card" style="border-left-color:${c.phase_color}">
@@ -277,7 +304,9 @@ if (M.crypto){
   <div class="card">
    <h3>Backtest: Ø Rendite 90 Tage danach</h3>
    ${c.stats.map(s=>`<div class="row"><span class="k">${s.asset} · ${s.band}</span><span class="v">Ø ${(s.avg_90d>0?'+':'')+s.avg_90d}% · ${s.hit}% pos. · n=${s.n}</span></div>`).join('')}
-   <div class="sm mut" style="margin-top:10px">Boden-Signale: ${c.bottom_signals.join(' · ')}<br>Top-Signale: ${c.top_signals.join(' · ')}</div>
+   ${c.equity?`<div class="row"><span class="k"><b>Strategie seit ${c.equity.dates[0].slice(0,4)}</b></span><span class="v up">${c.equity.strat_x}x · MaxDD ${c.equity.strat_dd}%</span></div>
+   <div class="row"><span class="k"><b>Buy & Hold</b></span><span class="v">${c.equity.hold_x}x · MaxDD ${c.equity.hold_dd}%</span></div>`:''}
+   <div class="sm mut" style="margin-top:10px">Boden-Signale: ${c.bottom_signals.join(' · ')}<br>Top-Signale: ${c.top_signals.join(' · ')}<br>Hinweis: Signale in-sample kalibriert — Live-Track-Record läuft seit ${M.updated.slice(0,10)} (history.csv).</div>
   </div>`;
 }
 for(const id of ['f_mri_l','f_ct_l','f_us_l','f_cb_l','f_gl_l','f_ca_l','f_rl_l']) document.getElementById(id).textContent=cp;
@@ -301,10 +330,14 @@ card('System',`<div class="row"><span class="k">Chart-Historie</span><span class
 /* ---------- Interaktion: Vollbild + Zoom-Reset ---------- */
 document.querySelectorAll('.panel').forEach(p=>{
   const tb=document.createElement('div'); tb.className='tools';
-  tb.innerHTML='<button class="tbtn" title="Zoom zurücksetzen">⟲</button><button class="tbtn" title="Vollbild">⛶</button>';
+  tb.innerHTML='<button class="tbtn">1J</button><button class="tbtn">3J</button><button class="tbtn">5J</button><button class="tbtn" title="Alles">Max</button><button class="tbtn" title="Vollbild">⛶</button>';
   const btns=tb.querySelectorAll('button');
-  btns[0].onclick=()=>{const c=Chart.getChart(p.querySelector('canvas')); if(c&&c.resetZoom)c.resetZoom();};
-  btns[1].onclick=()=>{document.fullscreenElement?document.exitFullscreen():p.requestFullscreen();};
+  const getC=()=>Chart.getChart(p.querySelector('canvas'));
+  const range=yrs=>{const ch=getC(); if(!ch)return; if(!yrs){if(ch.resetZoom)ch.resetZoom(); return;}
+    const max=T[T.length-1], min=max-yrs*365.25*864e5;
+    if(ch.zoomScale)ch.zoomScale('x',{min:min,max:max},'none');};
+  btns[0].onclick=()=>range(1); btns[1].onclick=()=>range(3); btns[2].onclick=()=>range(5); btns[3].onclick=()=>range(0);
+  btns[4].onclick=()=>{document.fullscreenElement?document.exitFullscreen():p.requestFullscreen();};
   p.insertBefore(tb,p.firstChild);
 });
 document.querySelectorAll('.cwrap canvas').forEach(cv=>{cv.ondblclick=()=>{const c=Chart.getChart(cv); if(c&&c.resetZoom)c.resetZoom();};});
