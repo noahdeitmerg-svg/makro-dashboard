@@ -42,6 +42,78 @@ def pct_rank(s, window=WINDOW):
     """Rollierendes Perzentil 0-100 (Kalibrierungs-Kern aller Sub-Scores)."""
     return s.rolling(window, min_periods=200).rank(pct=True)*100
 
+def compute_crypto(btc, eth, mri, liq, usd, risk, idx):
+    """Krypto-Zyklus-Analyse: BTC/ETH-Verhalten relativ zum Makro-Regime.
+    Boden-/Top-Scores (0-100) aus Makro-Konstellation + BTC-Bewertung; bei jedem Update live neu berechnet.
+    KEINE Anlageberatung - statistische Auswertung der eigenen Historie."""
+    clip = lambda s: s.clip(0, 100)
+    ma200 = btc.rolling(200, min_periods=150).mean(); mayer = btc/ma200
+    dd = btc/btc.cummax() - 1                 # Drawdown vom Allzeithoch
+    liq_mom = liq.diff(90)
+    # Boden = sqrt(Preis-Schmerz x Makro-Kapitulation). Backtest-Treffer: Jun+Dez 2018, Maer 2020, Mai+Nov 2022.
+    pain = clip(pd.concat([(-dd-0.45)*250, (0.85-mayer)*200], axis=1).max(axis=1))
+    cap  = clip(pd.concat([(40-mri)*5, (usd-60)*4], axis=1).max(axis=1))
+    bottom = np.sqrt(pain.clip(lower=0) * cap.clip(lower=0))
+    # Top = sqrt(Preis-Hitze x Makro-Hitze), 14T-geglaettet + Preis-Hitze-Gate.
+    # Backtest-Treffer: Jun 2017 (frueh), Jan 2018, Apr 2021, Okt 2021. Markiert ZONEN, keine Exakt-Tops.
+    ret365 = btc.pct_change(365)*100
+    price_heat = clip(pd.concat([(mayer-1.3)*90, ret365*0.25], axis=1).max(axis=1))
+    gate = pd.Series(np.where(liq_mom < 5, 1.0, 0.3), index=mri.index)
+    macro_heat = clip((mri-45)*4) * gate
+    top_raw = np.sqrt(price_heat.clip(lower=0) * macro_heat.clip(lower=0))
+    top = top_raw.rolling(14).mean()
+
+    def sig_dates(score, thr, gap=180, extra=None, extra_thr=80):
+        dates = []; last = -10**9; v = score.values
+        for i in range(len(v)):
+            ok_extra = extra is None or (extra.values[i] == extra.values[i] and extra.values[i] >= extra_thr)
+            if v[i] == v[i] and v[i] >= thr and ok_extra and i-last >= gap:
+                dates.append(idx[i].date().isoformat()); last = i
+        return dates
+
+    # Forward-Return-Statistik (90 Tage), getrennt nach Makro-Band - das ist die "Recherche", live aus den Daten
+    stats = []
+    for asset, px in (('BTC', btc), ('ETH', eth)):
+        fwd = px.shift(-90)/px - 1
+        for name, mask in (('MRI<40', mri<40), ('MRI 40-55', (mri>=40)&(mri<55)), ('MRI>55', mri>=55),
+                           ('Boden-Signal', bottom>=65), ('Top-Signal', (top>=75)&(price_heat>=80))):
+            m = fwd[mask & fwd.notna() & px.notna()]
+            if len(m) > 20:
+                stats.append({'asset': asset, 'band': name, 'avg_90d': round(float(m.mean()*100),1),
+                              'hit': int(round(float((m>0).mean()*100))), 'n': int(len(m))})
+
+    b_now, t_now = float(bottom.iloc[-1]), float(top.iloc[-1])
+    mayer_now = float(mayer.iloc[-1]) if mayer.iloc[-1]==mayer.iloc[-1] else None
+    dd_now = float(dd.iloc[-1])
+    if b_now >= 65: phase, pcol = 'BODENZONE - historisch attraktive Kaufregion', '#43b581'
+    elif t_now >= 75: phase, pcol = 'TOP-RISIKO - historisch Verkaufs-/Absicherungszone', '#f04747'
+    elif t_now > b_now: phase, pcol = 'SPAETZYKLUS - neutral bis vorsichtig', '#faa61a'
+    else: phase, pcol = 'FRUEHZYKLUS/NEUTRAL - abwarten, Bestaetigung suchen', '#949ba4'
+
+    liq_dir = 'steigend' if float(liq_mom.iloc[-1] or 0) > 0 else 'fallend'
+    usd_dir = 'fallend (entlastend)' if float(usd.diff(30).iloc[-1] or 0) < 0 else 'steigend (belastend)'
+    erwartung = (
+        'Boden-Score {:.0f}/100, Top-Score {:.0f}/100. '.format(b_now, t_now) +
+        'BTC notiert {:.0f}% unter ATH, Mayer-Multiple {} (BTC/200d-MA). '.format(-dd_now*100, '{:.2f}'.format(mayer_now) if mayer_now else 'n/a') +
+        'Liquiditaets-Momentum (90T) ist {}, USD-Stress (30T) {}. '.format(liq_dir, usd_dir) +
+        ('Historisch folgten auf diese Konstellation eher schwache bis seitwaertige 90-Tage-Renditen; aggressives Kaufen lohnte selten vor einem Liquiditaets-Turnaround. ' if t_now>b_now and b_now<65 else '') +
+        ('Historisch war diese Konstellation eine der besten Kaufzonen (Kapitulation: tiefer MRI/USD-Stress-Spitze + BTC tief unter ATH/200d-MA). ' if b_now>=65 else '') +
+        ('Historisch markierte diese Konstellation Top-Naehe: ueberhitzter Preis bei heissem Makro - gestaffeltes De-Risking war profitabel. ' if t_now>=75 else '') +
+        ('Aktuell fehlt fuer eine Kaufzone die Makro-Kapitulation (MRI muesste <40 oder USD-Stress >60 mit Spitze sein). ' if b_now<65 and dd_now<-0.40 else '') +
+        'Kaufzonen-Trigger: BTC >45% unter ATH oder Mayer <0.85, PLUS MRI <40 oder USD-Stress-Spitze >60. '
+        'Top-Risiko-Trigger: Mayer >1.4 oder extreme 1J-Rendite, PLUS MRI-Region >65 bei nicht mehr steigender Liquiditaet. '
+        'Signale markieren ZONEN (gestaffelt agieren/DCA), keine Exakt-Zeitpunkte.'
+    )
+    r0 = lambda s: [None if x!=x else int(round(float(x))) for x in s.values]
+    return {
+        'btc': r0(btc), 'eth': [None if x!=x else round(float(x),2) for x in eth.values],
+        'bottom_signals': sig_dates(bottom, 65), 'top_signals': sig_dates(top, 75, extra=price_heat),
+        'bottom_now': round(b_now,1), 'top_now': round(t_now,1),
+        'phase': phase, 'phase_color': pcol, 'erwartung': erwartung, 'stats': stats,
+        'mayer': round(mayer_now,2) if mayer_now else None, 'drawdown_pct': round(dd_now*100,1),
+        'disclaimer': 'Statistische Auswertung der eigenen Datenhistorie - keine Anlageberatung.',
+    }
+
 def main():
     keys = load_keys()
     if 'FRED_API_KEY' not in keys:
@@ -124,6 +196,13 @@ def main():
 
     dq = 100 if dq_pboc else 95
     payload = build(series, dates, releases=rel, data_quality=dq)
+    # Krypto-Zyklus-Analyse (auf den getrimmten Zeitraum ausgerichtet)
+    cut_idx = idx[-len(dates):]
+    aligned = lambda s: pd.Series(s, index=idx).reindex(cut_idx)
+    payload['crypto'] = compute_crypto(
+        al(Y['BTC-USD']).reindex(cut_idx), al(Y['ETH-USD']).reindex(cut_idx),
+        pd.Series(series['mri'], index=cut_idx), pd.Series(series['liquidity'], index=cut_idx),
+        pd.Series(series['usd_stress'], index=cut_idx), pd.Series(series['risk'], index=cut_idx), cut_idx)
     out = os.path.join(HERE,'data.js')
     open(out,'w',encoding='utf-8').write('window.MACRO_DATA = ' + json.dumps(payload, ensure_ascii=False) + ';')
     h = payload['headline']

@@ -48,6 +48,7 @@
 <div class="hero" id="hero"></div>
 <div class="grid charts" id="charts">
   <div class="panel big"><div class="hdr" id="h_mri"></div><div class="ttl">AlphaCycle - Macro Regime Index (0-100)</div><div class="cwrap"><canvas id="c_mri"></canvas></div><div class="ftr"><span id="f_mri_l"></span><span></span></div></div>
+  <div class="panel big"><div class="hdr" id="h_cr"></div><div class="ttl">AlphaCycle - BTC &amp; ETH vs. Macro Regime (log)</div><div class="cwrap"><canvas id="c_cr"></canvas></div><div class="ftr"><span id="f_cr_l"></span><span>▲ Boden-Signal (Kaufzone) • ▼ Top-Signal (De-Risking-Zone)</span></div></div>
   <div class="panel"><div class="hdr" id="h_ct"></div><div class="ttl">AlphaCycle - Credit Conditions Timing</div><div class="cwrap"><canvas id="c_ct"></canvas></div><div class="ftr"><span id="f_ct_l"></span><span>Higher = tighter credit • falling = easing</span></div></div>
   <div class="panel"><div class="hdr" id="h_us"></div><div class="ttl">AlphaCycle - USD Funding Stress</div><div class="cwrap"><canvas id="c_us"></canvas></div><div class="ftr"><span id="f_us_l"></span><span>Higher = USD+VIX stress • falling = easing</span></div></div>
   <div class="panel"><div class="hdr" id="h_cb"></div><div class="ttl">AlphaCycle - Central Bank Liquidity (USD)</div><div class="cwrap"><canvas id="c_cb"></canvas></div><div class="ftr"><span id="f_cb_l"></span><span></span></div></div>
@@ -133,6 +134,27 @@ card('Top Drivers', M.top_drivers.map(t=>`<div class="row"><span class="k">${t[0
 card('Cross-Asset Phase',`<div class="tagline">${M.cross_asset.phase} • ${M.cross_asset.confidence} confidence<br>NASDAQ/SPX ${M.cross_asset.nasdaq_spx} | SPX/Oil ${M.cross_asset.spx_oil}</div>`);
 card('Relative Leadership', M.leadership.map(l=>`<div class="row"><span class="k">${l[0]}:</span><span class="v mono">${l[1]}</span></div>`).join(''));
 card('Key Levels', M.key_levels.map(k=>`<div class="row"><span class="k">${lamp(k.light)}<b>${k.name}:</b></span><span class="v mono">${k.value}${k.detail?' '+k.detail:''}</span></div>`).join(''), '#43b581');
+/* ---------- Krypto: Chart + Analyse (live bei jedem Update neu berechnet) ---------- */
+if(M.crypto){
+ const cdat=M.crypto, idxOf={}; D.forEach((d,i)=>idxOf[d]=i);
+ document.getElementById('h_cr').textContent='Boden-Score '+cdat.bottom_now+'/100 | Top-Score '+cdat.top_now+'/100 | Mayer '+(cdat.mayer==null?'n/a':cdat.mayer)+' | BTC '+cdat.drawdown_pct+'% vom ATH';
+ const mark=sigs=>{const a=new Array(D.length).fill(null); (sigs||[]).forEach(s=>{const i=idxOf[s]; if(i!=null&&cdat.btc[i]!=null)a[i]=cdat.btc[i];}); return a;};
+ new Chart(document.getElementById('c_cr'),{type:'line',data:{labels:D,datasets:[
+  line(cdat.btc,'#f7931a','BTC',1.5),
+  line(cdat.eth,'#627eea','ETH',1.2),
+  {data:mark(cdat.bottom_signals),label:'Boden-Signal',pointStyle:'triangle',pointRadius:9,pointHoverRadius:11,pointBackgroundColor:'#2f9e44',pointBorderColor:'#1b5e20',borderWidth:0,showLine:false},
+  {data:mark(cdat.top_signals),label:'Top-Signal',pointStyle:'triangle',pointRotation:180,pointRadius:9,pointHoverRadius:11,pointBackgroundColor:'#e03131',pointBorderColor:'#8b0000',borderWidth:0,showLine:false}]},
+  options:{responsive:true,maintainAspectRatio:false,animation:false,interaction:{mode:'index',intersect:false},
+   scales:{x:xopts(D),y:{type:'logarithmic',ticks:{font:{size:10},color:'#333',callback:function(v){const l=Math.log10(v); return Number.isInteger(l)?v.toLocaleString('de-DE'):null}},grid:{display:false}}},
+   plugins:{legend:{display:true,position:'chartArea',align:'start',labels:{font:{size:9},boxWidth:18,color:'#222'}},tooltip:{enabled:true},zoom:ZOOM}},
+  plugins:[watermark]});
+ document.getElementById('f_cr_l').textContent=cp;
+ card('Krypto-Zyklus-Analyse',`<div class="badge" style="font-size:14px"><span class="dot" style="background:${cdat.phase_color};width:11px;height:11px"></span>${cdat.phase}</div>
+  <div class="tagline" style="margin-top:8px">${cdat.erwartung}</div>
+  <div class="sm mut" style="margin-top:8px">${cdat.disclaimer}</div>`, cdat.phase_color);
+ card('BTC/ETH Backtest: Ø Rendite 90 Tage nach Konstellation', cdat.stats.map(s=>`<div class="row"><span class="k">${s.asset} • ${s.band}</span><span class="v mono">Ø ${(s.avg_90d>0?'+':'')+s.avg_90d}% • ${s.hit}% positiv • n=${s.n}</span></div>`).join('')
+  +`<div class="sm mut" style="margin-top:8px">Boden-Signale: ${cdat.bottom_signals.join(' • ')}<br>Top-Signale: ${cdat.top_signals.join(' • ')}</div>`);
+}
 card('Chart Window / History',`<div class="row"><span class="k">Chart Window</span><span class="v">${M.window}d</span></div><div class="row"><span class="k">History</span><span class="v">${M.window}d</span></div><div class="row"><span class="k">Updated</span><span class="v">${M.updated}</span></div>`);
 
 /* ---------- Interaktion: Vollbild + Zoom-Reset pro Panel ---------- */

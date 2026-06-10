@@ -53,6 +53,24 @@ MRI/Liquidity/Growth: fallend = worsening · USD Stress & Credit: fallend = impr
 berechnet Deltas anders. Lösung hier: MRI-Chartserie wird historisch eigenständig geführt; der
 aktuelle Wert ist immer exakt formelkonsistent.
 
+## Krypto-Zyklus-Engine (compute_crypto)
+Backtest + Live-Signal, bei jedem Update neu berechnet. Keine Anlageberatung.
+
+**Boden-Score** = √(Preis-Schmerz × Makro-Kapitulation)
+- Preis-Schmerz = max( (Drawdown−45%)-Skala, (0.85−Mayer)-Skala )
+- Makro-Kapitulation = max( (40−MRI)·5, (USD-Stress−60)·4 )
+- Signal ≥ 65. Backtest-Treffer: 25.06.2018, 22.12.2018, 12.03.2020, 11.05.2022, 07.11.2022 —
+  alle echten Kapitulationszonen, inkl. COVID-Crash und FTX-Boden.
+
+**Top-Score** = √(Preis-Hitze × Makro-Hitze), 14 Tage geglättet
+- Preis-Hitze = max( (Mayer−1.3)·90, 1J-Rendite·0.25 ), Makro-Hitze = (MRI−45)·4, gedämpft (×0.3) wenn Liquiditäts-Momentum stark steigt
+- Signal ≥ 75 UND Preis-Hitze ≥ 80. Backtest: 10.06.2017 (früh), 21.01.2018, 06.04.2021, 03.10.2021.
+- Markiert ZONEN für gestaffeltes De-Risking, keine Exakt-Tops. Schwache Zyklustops (2024/2025, Mayer < 1.4) werden NICHT erkannt — bekannte Grenze.
+
+**Kernbefund Backtest (90-Tage-Forward-Renditen, live mitberechnet):**
+BTC bei MRI > 55: Ø +37.6%, 67% positiv · bei MRI < 40: Ø +10.7%, 56% · Top-Signal-Tage: nur 37% positiv, ETH Ø −11%.
+→ Das Makro-Regime (v.a. Liquidität) ist der dominante Treiber: kaufen lohnt historisch in Kapitulation + bei drehender Liquidität, De-Risking bei Preis-Hitze + abdrehender Liquidität.
+
 ## Demo- vs. Live-Daten
 Mitgelieferte `data.js` = rekonstruierte 2200-Tage-Historie, an JEDEM publizierten Wert beider
 Snapshots exakt verankert (alle Zahlen der Checkliste matchen). `python update_data.py` ersetzt
